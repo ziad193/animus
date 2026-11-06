@@ -5,7 +5,7 @@ import Foundation
 import StudyCore
 
 let args = CommandLine.arguments
-guard args.count == 2 || (args.count == 4 && args[2] == "study") || (args.count == 3 && ["stats", "add-test"].contains(args[2])) || (args.count == 4 && args[2] == "import") || (args.count >= 3 && args[2] == "browse") || (args.count == 3 && args[2] == "deckmenu") || (args.count == 3 && args[2] == "stocktypes") || (args.count == 3 && args[2] == "filtered") || (args.count == 3 && args[2] == "backuptest") || (args.count == 3 && args[2] == "actions") || (args.count == 3 && args[2] == "bulk") || (args.count == 3 && args[2] == "stats2") || (args.count == 4 && args[2] == "house") || (args.count == 4 && args[2] == "occlusion") || (args.count == 5 && args[2] == "synctest") || (args.count == 3 && args[1] == "synclogin") else {
+guard args.count == 2 || (args.count == 4 && args[2] == "study") || (args.count == 3 && ["stats", "add-test"].contains(args[2])) || (args.count == 4 && args[2] == "import") || (args.count >= 3 && args[2] == "browse") || (args.count == 3 && args[2] == "deckmenu") || (args.count == 3 && args[2] == "stocktypes") || (args.count == 3 && args[2] == "filtered") || (args.count == 3 && args[2] == "backuptest") || (args.count == 3 && args[2] == "actions") || (args.count == 3 && args[2] == "bulk") || (args.count == 3 && args[2] == "stats2") || (args.count == 3 && args[2] == "types") || (args.count == 4 && args[2] == "house") || (args.count == 4 && args[2] == "occlusion") || (args.count == 5 && args[2] == "synctest") || (args.count == 3 && args[1] == "synclogin") else {
     print("usage: study-cli <collection.anki2> [study <deck id>]")
     exit(2)
 }
@@ -139,6 +139,38 @@ do {
         try await engine.exportCollection(to: out, includeMedia: false)
         let size = (try FileManager.default.attributesOfItem(atPath: out.path)[.size] as? Int) ?? 0
         print("exported colpkg bytes:", size, "still works:", try await engine.search("").count)
+    } else if args[2] == "types" {
+        let list = try await engine.noteTypeSummaries()
+        print("types:", list.map { "\($0.name) (\($0.notes))" }.prefix(6))
+        let basic = list.first { $0.name.hasPrefix("Basic") && $0.notes > 0 && !$0.isCloze }!
+        var spec = try await engine.noteTypeSpec(basic.id)
+        print("spec \(spec.name): fields \(spec.fields.map { "\($0.ord ?? -1):\($0.name)" }) templates \(spec.templates.count) css \(spec.css.count) chars")
+        let card = try await engine.search("mid:\(basic.id)").first!
+        let before = try await engine.note(forCard: card)
+        // rename first field, swap order, add a field, change front layout and css
+        let oldName = spec.fields[0].name
+        spec.fields[0].name = "Question"
+        spec.templates[0].front = spec.templates[0].front.replacingOccurrences(of: "{{\(oldName)}}", with: "{{Question}}")
+        spec.templates[0].back = spec.templates[0].back.replacingOccurrences(of: "{{\(oldName)}}", with: "{{Question}}")
+        spec.fields.swapAt(0, 1)
+        spec.fields.append(.init(name: "Source"))
+        spec.css += "\n.card { color: teal; }"
+        try await engine.saveNoteType(spec)
+        let after = try await engine.note(forCard: card)
+        print("fields now \(after.fieldNames); question kept: \(after.fields[1] == before.fields[0]); answer kept: \(after.fields[0] == before.fields[1]); new empty: \(after.fields[2].isEmpty)")
+        let respec = try await engine.noteTypeSpec(basic.id)
+        print("front layout: \(respec.templates[0].front.prefix(60)) css teal: \(respec.css.contains("teal"))")
+        let copy = try await engine.copyNoteType(basic.id, name: "Test copy")
+        print("copy:", try await engine.noteTypeSummaries().first { $0.id == copy }.map { "\($0.name) \($0.notes) notes" } ?? "missing")
+        try await engine.deleteNoteType(copy)
+        print("after delete exists:", try await engine.noteTypeSummaries().contains { $0.id == copy })
+        let io = try await engine.search("note:\"Image Occlusion*\"").first
+        if let io {
+            let n = try await engine.note(forCard: io)
+            try await engine.updateOcclusion(note: n.noteID, occlusions: "{{c1::image-occlusion:rect:left=.1:top=.1:width=.2:height=.2:oi=1}}", header: "Edited", backExtra: "", tags: n.tags)
+            let n2 = try await engine.note(forCard: io)
+            print("IO updated: \(n2.fields[0]) header \(n2.fields[2]) ordinal \(n2.cardOrdinal)")
+        }
     } else if args[2] == "stats2" {
         let st = try await engine.stats(days: 365)
         print("intervals buckets:", st.intervals.count, "max ivl:", st.intervals.keys.max() ?? 0)

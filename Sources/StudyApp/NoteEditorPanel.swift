@@ -24,6 +24,28 @@ struct NoteEditorPanel: View {
     @AppStorage("browseShowHTML") private var showHTML = false
     @State private var error: String?
     @State private var saved = false
+    @State private var editingBoxes = false
+    @State private var editingType = false
+
+    /// Anki's own "hide parts of a picture" card type.
+    private func isOcclusion(_ note: EditableNote) -> Bool {
+        note.fieldNames.first == "Occlusion" && note.fieldNames.contains("Image")
+    }
+
+    private func occlusionCard(_ note: EditableNote) -> OcclusionCard? {
+        let fields = Dictionary(zip(note.fieldNames, note.fields), uniquingKeysWith: { a, _ in a })
+        return OcclusionCard(OcclusionFields(kind: "builtin", ordinal: note.cardOrdinal + 1, fields: fields),
+                             media: Library.mediaFolder)
+    }
+
+    private func imageURL(_ note: EditableNote) -> URL? {
+        guard let index = note.fieldNames.firstIndex(of: "Image"),
+              let range = note.fields[index].range(of: #"src\s*=\s*"[^"]+""#, options: .regularExpression) else { return nil }
+        let match = note.fields[index][range]
+        guard let start = match.firstIndex(of: "\""), let end = match.lastIndex(of: "\""), start < end else { return nil }
+        let name = String(match[match.index(after: start)..<end])
+        return Library.mediaFolder.appendingPathComponent(name.removingPercentEncoding ?? name)
+    }
 
     private var changed: Bool {
         drafts.contains(where: \.changed) || tags != originalTags
@@ -42,6 +64,23 @@ struct NoteEditorPanel: View {
         }
         .background(.background.secondary)
         .task { await load() }
+        .sheet(isPresented: $editingType, onDismiss: { Task { await load() } }) {
+            CardTypesView(startID: note?.noteTypeID)
+        }
+        .sheet(isPresented: $editingBoxes) {
+            if let note, let url = imageURL(note) {
+                BoxEditSheet(note: note, image: url, tags: $tags) {
+                    editingBoxes = false
+                    Task {
+                        await load()
+                        if let engine = library.engine {
+                            model.didChange("Edit Boxes")
+                            await model.reload([cardID], engine: engine)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private func content(_ note: EditableNote) -> some View {
@@ -51,9 +90,15 @@ struct NoteEditorPanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
-                        Label(note.noteTypeName, systemImage: "rectangle.on.rectangle")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        Button {
+                            editingType = true
+                        } label: {
+                            Label(note.noteTypeName, systemImage: "rectangle.on.rectangle")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.hoverable)
+                        .help("Edit this card type's fields, layout and styling")
                         Spacer()
                         Toggle("Show HTML", isOn: $showHTML)
                             .toggleStyle(.switch)
@@ -68,8 +113,21 @@ struct NoteEditorPanel: View {
                                 .truncationMode(.head)
                         }
                     }
+                    if isOcclusion(note), imageURL(note) != nil {
+                        Button {
+                            editingBoxes = true
+                        } label: {
+                            Label("Edit Boxes…", systemImage: "rectangle.dashed")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .hoverGlow()
+                        .help("Move, add or remove the boxes hiding parts of this picture")
+                    }
                     ForEach($drafts) { $draft in
-                        FieldEditor(draft: $draft, showHTML: showHTML)
+                        // The boxes and picture are edited with Edit Boxes, not as text.
+                        if !(isOcclusion(note) && !showHTML && ["Occlusion", "Image"].contains(draft.name)) {
+                            FieldEditor(draft: $draft, showHTML: showHTML)
+                        }
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Tags").font(.subheadline.weight(.medium))
@@ -93,6 +151,13 @@ struct NoteEditorPanel: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(width: 180)
+            if isOcclusion(note), let card = occlusionCard(note) {
+                OcclusionCardView(card: card, showingAnswer: showAnswer, accent: accent.color)
+                    .padding(10)
+                    .frame(minHeight: 180, idealHeight: 230)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(.background))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator.opacity(0.6)))
+            } else {
             CardWebView(payload: CardPayload(
                             cardID: note.cardID,
                             side: showAnswer ? .answer : .question,
@@ -107,6 +172,7 @@ struct NoteEditorPanel: View {
                 .frame(minHeight: 180, idealHeight: 230)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator.opacity(0.6)))
+            }
         }
         .padding(14)
         .frame(height: 290)
@@ -250,5 +316,37 @@ private struct FieldEditor: View {
         }
         .buttonStyle(.hoverable)
         .help(help)
+    }
+}
+
+
+/// Reopens the box editor for a picture card from Browse.
+private struct BoxEditSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let note: EditableNote
+    let image: URL
+    @Binding var tags: String
+    let saved: () -> Void
+
+    private func field(_ name: String) -> String {
+        note.fieldNames.firstIndex(of: name).map { note.fields[$0] } ?? ""
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Edit boxes", systemImage: "rectangle.dashed").font(.title2.weight(.semibold))
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            ScrollView {
+                OcclusionEditor(deckID: note.deckID, tags: $tags, onAdded: { _ in saved() },
+                                existing: .init(noteID: note.noteID, image: image, occlusions: field("Occlusion"),
+                                                header: OcclusionCard.plainText(field("Header")),
+                                                extra: OcclusionCard.plainText(field("Back Extra"))))
+            }
+        }
+        .padding(20)
+        .frame(width: 820, height: 720)
     }
 }

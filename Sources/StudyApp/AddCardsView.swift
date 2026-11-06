@@ -23,6 +23,7 @@ struct AddCardsView: View {
     @State private var sticky: Set<Int> = []
     @State private var duplicate = false
     @State private var wide = true
+    @State private var showCardTypes = false
     @State private var toast: String?
     @State private var error: String?
     @AppStorage("addCards.showReference") private var showReference = false
@@ -57,6 +58,14 @@ struct AddCardsView: View {
             }
         }
         .task { await load() }
+        .sheet(isPresented: $showCardTypes, onDismiss: {
+            Task {
+                noteTypes = (try? await library.engine?.noteTypes()) ?? noteTypes
+                resetFields()
+            }
+        }) {
+            CardTypesView(startID: noteType?.id)
+        }
         .onChange(of: initialDeckID) { if let initialDeckID { deckID = initialDeckID } }
         .onChange(of: kind) { resetFields() }
         .onChange(of: otherType) { resetFields() }
@@ -129,7 +138,17 @@ struct AddCardsView: View {
 
     private var typePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("What kind of card?").font(.headline)
+            HStack {
+                Text("What kind of card?").font(.headline)
+                Spacer()
+                Button {
+                    showCardTypes = true
+                } label: {
+                    Label("Manage Card Types", systemImage: "slider.horizontal.below.rectangle")
+                }
+                .buttonStyle(.hoverable)
+                .help("Change a card type's fields, layout and styling, or make a new one")
+            }
             // Wraps onto a second row when the Slides & Notes panel is open.
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 150), spacing: 10, alignment: .leading)],
                       alignment: .leading, spacing: 10) {

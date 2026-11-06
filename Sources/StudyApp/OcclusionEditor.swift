@@ -10,6 +10,17 @@ struct OcclusionEditor: View {
     let deckID: Int64?
     @Binding var tags: String
     let onAdded: (Int) -> Void
+    /// Set to edit the boxes of a card you already have, instead of making a new one.
+    var existing: Existing? = nil
+
+    struct Existing {
+        let noteID: Int64
+        let image: URL
+        /// The note's Occlusion field, in Anki's format.
+        let occlusions: String
+        let header: String
+        let extra: String
+    }
 
     struct Box: Identifiable, Equatable {
         enum Kind: String { case rect, ellipse }
@@ -36,6 +47,8 @@ struct OcclusionEditor: View {
     @State private var error: String?
     @State private var working = false
     @State private var dropTargeted = false
+    /// Shapes Iterum can't edit (e.g. freehand polygons drawn in Anki); kept as they are.
+    @State private var keptShapes: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -89,6 +102,17 @@ struct OcclusionEditor: View {
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
             .foregroundStyle(dropTargeted ? AnyShapeStyle(.tint) : AnyShapeStyle(.separator)))
         .onAppear {
+            if let existing {
+                guard image == nil else { return }
+                load(existing.image)
+                let parsed = Self.parse(existing.occlusions)
+                boxes = parsed.boxes
+                keptShapes = parsed.kept
+                hideAll = parsed.hideAll
+                header = existing.header
+                extra = existing.extra
+                return
+            }
             // For developers: preload a picture when running on a test collection.
             if Library.isTestCollection, let path = ProcessInfo.processInfo.environment["ITERUM_TEST_IMAGE"] {
                 load(URL(fileURLWithPath: path))
@@ -169,8 +193,10 @@ struct OcclusionEditor: View {
             Text(cardCount == 0 ? "Drag over a label to hide it" : "\(cardCount) card\(cardCount == 1 ? "" : "s")")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Button { image = nil; imageURL = nil; boxes = [] } label: { Label("Other Picture", systemImage: "photo") }
-                .help("Start again with a different picture")
+            if existing == nil {
+                Button { image = nil; imageURL = nil; boxes = [] } label: { Label("Other Picture", systemImage: "photo") }
+                    .help("Start again with a different picture")
+            }
         }
         .buttonStyle(.hoverable)
     }
@@ -374,20 +400,41 @@ struct OcclusionEditor: View {
                 if working {
                     ProgressView().controlSize(.small)
                 } else {
-                    Label(cardCount <= 1 ? "Add Card" : "Add \(cardCount) Cards", systemImage: "plus")
-                        .padding(.horizontal, 8)
+                    if existing != nil {
+                        Label("Save Changes", systemImage: "checkmark").padding(.horizontal, 8)
+                    } else {
+                        Label(cardCount <= 1 ? "Add Card" : "Add \(cardCount) Cards", systemImage: "plus")
+                            .padding(.horizontal, 8)
+                    }
                 }
             }
             .buttonStyle(.borderedProminent)
             .hoverGlow()
             .controlSize(.large)
             .keyboardShortcut(.return, modifiers: .command)
-            .disabled(boxes.isEmpty || deckID == nil || working)
+            .disabled(boxes.isEmpty || (deckID == nil && existing == nil) || working)
             .help("Add (⌘Return)")
         }
     }
 
     /// Anki's own text format for the boxes.
+    private func saveChanges() async {
+        guard let engine = library.engine, let existing, !boxes.isEmpty else { return }
+        working = true
+        defer { working = false }
+        let tagList = tags.split(whereSeparator: { $0 == " " || $0 == "," }).map(String.init)
+        let text = ([Self.occlusionText(boxes, hideAll: hideAll)] + keptShapes).joined(separator: "<br>")
+        do {
+            try await engine.updateOcclusion(note: existing.noteID, occlusions: text, header: header,
+                                             backExtra: extra, tags: tagList)
+            error = nil
+            onAdded(cardCount)
+            await library.refresh()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     nonisolated static func occlusionText(_ boxes: [Box], hideAll: Bool) -> String {
         func number(_ value: CGFloat) -> String {
             var text = String(format: "%.4f", Double(value))
@@ -404,7 +451,37 @@ struct OcclusionEditor: View {
         .joined(separator: "<br>")
     }
 
+    /// Reads Anki's occlusion text back into boxes.
+    static func parse(_ text: String) -> (boxes: [Box], kept: [String], hideAll: Bool) {
+        let pattern = #"\{\{c(\d+)::image-occlusion:(\w+):([^}]*)\}\}"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return ([], [], true) }
+        let ns = text as NSString
+        var boxes: [Box] = []
+        var kept: [String] = []
+        var hideAll = true
+        for match in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let card = Int(ns.substring(with: match.range(at: 1))) ?? 1
+            let kind = ns.substring(with: match.range(at: 2))
+            var props: [String: String] = [:]
+            for part in ns.substring(with: match.range(at: 3)).split(separator: ":") {
+                let pair = part.split(separator: "=", maxSplits: 1).map(String.init)
+                if pair.count == 2 { props[pair[0]] = pair[1] }
+            }
+            if props["oi"] == "0" { hideAll = false }
+            guard let boxKind = Box.Kind(rawValue: kind) else {
+                kept.append(ns.substring(with: match.range))
+                continue
+            }
+            let value = { (key: String) in CGFloat(Double(props[key] ?? "") ?? 0) }
+            boxes.append(Box(kind: boxKind,
+                             frame: CGRect(x: value("left"), y: value("top"), width: value("width"), height: value("height")),
+                             card: card))
+        }
+        return (boxes, kept, hideAll)
+    }
+
     private func add() async {
+        if existing != nil { return await saveChanges() }
         guard let engine = library.engine, let deckID, let imageURL, !boxes.isEmpty else { return }
         working = true
         defer { working = false }

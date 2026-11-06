@@ -661,6 +661,36 @@ pub unsafe extern "C" fn study_add_occlusion(engine: *mut Engine, json: *const c
     }
 }
 
+#[derive(serde::Deserialize)]
+struct UpdateOcclusionRequest {
+    note_id: i64,
+    occlusions: String,
+    #[serde(default)]
+    header: String,
+    #[serde(default)]
+    back_extra: String,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+/// Saves new boxes (and title / extra / tags) for an image occlusion note.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_update_occlusion(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    unsafe {
+        with_request(engine, json, |inner, req: UpdateOcclusionRequest| {
+            inner.current = None;
+            inner
+                .col
+                .update_image_occlusion_note(NoteId(req.note_id), &req.occlusions, &req.header, &req.back_extra, req.tags)
+                .map_err(|e| e.to_string())?;
+            Ok(true)
+        })
+    }
+}
+
 /// Adds one of Anki's standard card types if the collection doesn't have it,
 /// e.g. decks made without "Basic (type in the answer)". JSON: "basic",
 /// "reversed", "typing" or "cloze". Returns the new card type's id.
@@ -1112,6 +1142,8 @@ pub unsafe extern "C" fn study_browse_rows(engine: *mut Engine, json: *const c_c
 struct NoteJson {
     note_id: i64,
     card_id: i64,
+    /// Which card of the note this is (0-based template / cloze number − 1).
+    card_ordinal: u16,
     deck_id: i64,
     notetype_id: i64,
     notetype_name: String,
@@ -1162,6 +1194,7 @@ pub unsafe extern "C" fn study_note_for_card(engine: *mut Engine, json: *const c
             Ok(NoteJson {
                 note_id: note.id.0,
                 card_id,
+                card_ordinal: card.template_idx(),
                 deck_id: card.deck_id().0,
                 notetype_id: notetype.id.0,
                 notetype_name: notetype.name.clone(),
@@ -2661,6 +2694,208 @@ pub unsafe extern "C" fn study_export_collection(engine: *mut Engine, json: *con
                 let tr = I18n::new(&["en"]);
                 e.message(&tr)
             })?;
+            Ok(true)
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Card type editor
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct NotetypeSummary {
+    id: i64,
+    name: String,
+    notes: u32,
+    is_cloze: bool,
+}
+
+/// Every card type with how many notes use it.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`.
+#[no_mangle]
+pub unsafe extern "C" fn study_notetype_list(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    use anki::services::NotetypesService;
+    unsafe {
+        with_request(engine, json, |inner, _: serde_json::Value| {
+            let counts = NotetypesService::get_notetype_names_and_counts(&mut inner.col).map_err(|e| e.to_string())?;
+            let mut out = Vec::new();
+            for entry in counts.entries {
+                let is_cloze = inner
+                    .col
+                    .get_notetype(anki::notetype::NotetypeId(entry.id))
+                    .ok()
+                    .flatten()
+                    .map(|n| n.config.kind() == anki::notetype::NotetypeKind::Cloze)
+                    .unwrap_or(false);
+                out.push(NotetypeSummary { id: entry.id, name: entry.name, notes: entry.use_count, is_cloze });
+            }
+            Ok(out)
+        })
+    }
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct FieldSpec {
+    /// The field's original position; None for a new field.
+    ord: Option<u32>,
+    name: String,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct TemplateSpec {
+    ord: Option<u32>,
+    name: String,
+    front: String,
+    back: String,
+}
+
+#[derive(Serialize, serde::Deserialize)]
+struct NotetypeSpec {
+    id: i64,
+    name: String,
+    #[serde(default)]
+    is_cloze: bool,
+    fields: Vec<FieldSpec>,
+    templates: Vec<TemplateSpec>,
+    css: String,
+}
+
+/// A card type's fields, card layouts and styling.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_notetype_get(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    unsafe {
+        with_request(engine, json, |inner, id: i64| {
+            let nt = inner
+                .col
+                .get_notetype(anki::notetype::NotetypeId(id))
+                .map_err(|e| e.to_string())?
+                .ok_or("that card type no longer exists")?;
+            Ok(NotetypeSpec {
+                id,
+                name: nt.name.clone(),
+                is_cloze: nt.config.kind() == anki::notetype::NotetypeKind::Cloze,
+                fields: nt.fields.iter().map(|f| FieldSpec { ord: f.ord, name: f.name.clone() }).collect(),
+                templates: nt
+                    .templates
+                    .iter()
+                    .map(|t| TemplateSpec {
+                        ord: t.ord,
+                        name: t.name.clone(),
+                        front: t.config.q_format.clone(),
+                        back: t.config.a_format.clone(),
+                    })
+                    .collect(),
+                css: nt.config.css.clone(),
+            })
+        })
+    }
+}
+
+/// Saves a card type: renamed, added, removed or reordered fields and cards, new layouts and styling.
+/// Fields keep their text by their original position (`ord`).
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_notetype_save(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    use anki::notetype::{CardTemplate, NoteField, NotetypeId};
+    unsafe {
+        with_request(engine, json, |inner, spec: NotetypeSpec| {
+            inner.current = None;
+            let tr = I18n::new(&["en"]);
+            let original = inner
+                .col
+                .get_notetype(NotetypeId(spec.id))
+                .map_err(|e| e.to_string())?
+                .ok_or("that card type no longer exists")?;
+            let mut nt = (*original).clone();
+            nt.name = spec.name.trim().to_string();
+            // Fields: keep existing ones (with their settings) by ord, add new ones.
+            let mut fields = Vec::new();
+            for f in spec.fields {
+                let mut field = f
+                    .ord
+                    .and_then(|ord| original.fields.iter().find(|x| x.ord == Some(ord)).cloned())
+                    .unwrap_or_else(|| NoteField::new(f.name.clone()));
+                field.name = f.name.trim().to_string();
+                fields.push(field);
+            }
+            nt.fields = fields;
+            let mut templates = Vec::new();
+            for t in spec.templates {
+                let mut template = t
+                    .ord
+                    .and_then(|ord| original.templates.iter().find(|x| x.ord == Some(ord)).cloned())
+                    .unwrap_or_else(|| CardTemplate::new(t.name.clone(), "", ""));
+                template.name = t.name.trim().to_string();
+                template.config.q_format = t.front;
+                template.config.a_format = t.back;
+                templates.push(template);
+            }
+            nt.templates = templates;
+            nt.config.css = spec.css;
+            inner.col.update_notetype(&mut nt, false).map_err(|e| e.message(&tr))?;
+            Ok(true)
+        })
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct CopyNotetypeRequest {
+    id: i64,
+    name: String,
+}
+
+/// Makes a new card type as a copy of another (with no notes). Returns its id.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_notetype_copy(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    use anki::notetype::NotetypeId;
+    unsafe {
+        with_request(engine, json, |inner, req: CopyNotetypeRequest| {
+            let tr = I18n::new(&["en"]);
+            let original = inner
+                .col
+                .get_notetype(NotetypeId(req.id))
+                .map_err(|e| e.to_string())?
+                .ok_or("that card type no longer exists")?;
+            let mut nt = (*original).clone();
+            nt.id = NotetypeId(0);
+            nt.name = req.name.trim().to_string();
+            for f in nt.fields.iter_mut() {
+                f.ord = None;
+            }
+            for t in nt.templates.iter_mut() {
+                t.ord = None;
+            }
+            inner.col.add_notetype(&mut nt, false).map_err(|e| e.message(&tr))?;
+            Ok(nt.id.0)
+        })
+    }
+}
+
+/// Deletes a card type and every note that uses it.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_notetype_delete(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    unsafe {
+        with_request(engine, json, |inner, id: i64| {
+            inner.current = None;
+            let tr = I18n::new(&["en"]);
+            inner
+                .col
+                .remove_notetype(anki::notetype::NotetypeId(id))
+                .map_err(|e| e.message(&tr))?;
             Ok(true)
         })
     }

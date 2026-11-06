@@ -74,6 +74,12 @@ public struct OcclusionFields: Decodable, Equatable {
     /// Which card of the note this is (1-based).
     public let ordinal: Int
     public let fields: [String: String]
+
+    public init(kind: String, ordinal: Int, fields: [String: String]) {
+        self.kind = kind
+        self.ordinal = ordinal
+        self.fields = fields
+    }
 }
 
 /// Study history for the stats page.
@@ -259,6 +265,50 @@ public struct CSVImportResult: Decodable, Sendable {
     public let problems: Int
 }
 
+public struct NoteTypeSummary: Decodable, Sendable, Identifiable, Hashable {
+    public let id: Int64
+    public let name: String
+    public let notes: Int
+    public let isCloze: Bool
+    enum CodingKeys: String, CodingKey {
+        case id, name, notes
+        case isCloze = "is_cloze"
+    }
+}
+
+/// A card type as edited: fields, card layouts and styling.
+public struct NoteTypeSpec: Codable, Sendable, Equatable {
+    public struct Field: Codable, Sendable, Equatable, Identifiable {
+        /// Original position (nil = new). Keeps each field's text when renaming or reordering.
+        public var ord: Int?
+        public var name: String
+        public var id = UUID()
+        public init(ord: Int? = nil, name: String) { self.ord = ord; self.name = name }
+        enum CodingKeys: String, CodingKey { case ord, name }
+    }
+    public struct Template: Codable, Sendable, Equatable, Identifiable {
+        public var ord: Int?
+        public var name: String
+        public var front: String
+        public var back: String
+        public var id = UUID()
+        public init(ord: Int? = nil, name: String, front: String, back: String) {
+            self.ord = ord; self.name = name; self.front = front; self.back = back
+        }
+        enum CodingKeys: String, CodingKey { case ord, name, front, back }
+    }
+    public let id: Int64
+    public var name: String
+    public var isCloze: Bool
+    public var fields: [Field]
+    public var templates: [Template]
+    public var css: String
+    enum CodingKeys: String, CodingKey {
+        case id, name, fields, templates, css
+        case isCloze = "is_cloze"
+    }
+}
+
 /// Notes that share the same first field.
 public struct DuplicateGroup: Decodable, Sendable, Identifiable, Hashable {
     public var id: String { noteType + "|" + text }
@@ -320,6 +370,8 @@ public struct CardInfo: Decodable, Sendable {
 public struct EditableNote: Decodable, Sendable, Equatable {
     public let noteID: Int64
     public let cardID: Int64
+    /// Which card of the note this is (0-based).
+    public let cardOrdinal: Int
     public let deckID: Int64
     public let noteTypeID: Int64
     public let noteTypeName: String
@@ -333,7 +385,7 @@ public struct EditableNote: Decodable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case fields, tags, question, answer, css
-        case noteID = "note_id", cardID = "card_id", deckID = "deck_id"
+        case noteID = "note_id", cardID = "card_id", deckID = "deck_id", cardOrdinal = "card_ordinal"
         case noteTypeID = "notetype_id", noteTypeName = "notetype_name"
         case isCloze = "is_cloze", fieldNames = "field_names"
     }
@@ -848,6 +900,41 @@ public actor Engine {
     public func studyMore(_ deck: Int64, newCards: Int = 0, reviews: Int = 0) throws {
         struct Request: Encodable { let deck_id: Int64; let new_cards: Int; let reviews: Int }
         let _: Bool = try call(study_more, Request(deck_id: deck, new_cards: newCards, reviews: reviews))
+    }
+
+    /// Saves new boxes, title, extra and tags for an image occlusion note.
+    public func updateOcclusion(note: Int64, occlusions: String, header: String, backExtra: String, tags: [String]) throws {
+        struct Request: Encodable {
+            let note_id: Int64; let occlusions: String; let header: String; let back_extra: String; let tags: [String]
+        }
+        let _: Bool = try call(study_update_occlusion, Request(note_id: note, occlusions: occlusions, header: header,
+                                                               back_extra: backExtra, tags: tags))
+    }
+
+    // MARK: Card types
+
+    public func noteTypeSummaries() throws -> [NoteTypeSummary] {
+        try call(study_notetype_list, [String: String]())
+    }
+
+    public func noteTypeSpec(_ id: Int64) throws -> NoteTypeSpec {
+        try call(study_notetype_get, id)
+    }
+
+    /// Saves fields, card layouts and styling. Adding, removing or reordering fields or cards needs a one-way sync.
+    public func saveNoteType(_ spec: NoteTypeSpec) throws {
+        let _: Bool = try call(study_notetype_save, spec)
+    }
+
+    /// A new card type copied from another; returns its id.
+    public func copyNoteType(_ id: Int64, name: String) throws -> Int64 {
+        struct Request: Encodable { let id: Int64; let name: String }
+        return try call(study_notetype_copy, Request(id: id, name: name))
+    }
+
+    /// Deletes a card type and all its notes.
+    public func deleteNoteType(_ id: Int64) throws {
+        let _: Bool = try call(study_notetype_delete, id)
     }
 
     // MARK: Card actions

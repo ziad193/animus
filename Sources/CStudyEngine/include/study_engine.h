@@ -48,6 +48,7 @@ char *study_sync_media(Engine *engine, const char *json);
 // Checks a note before adding (duplicates etc.).
 char *study_check_note(Engine *engine, const char *json);
 // Image occlusion.
+char *study_update_occlusion(Engine *engine, const char *json);
 char *study_add_occlusion(Engine *engine, const char *json);
 // Browse power tools.
 char *study_bulk(Engine *engine, const char *json);
@@ -64,6 +65,12 @@ char *study_leech_state(Engine *engine, const char *json);
 char *study_csv_preview(Engine *engine, const char *json);
 char *study_import_csv(Engine *engine, const char *json);
 char *study_export_collection(Engine *engine, const char *json);
+// Card type editor.
+char *study_notetype_list(Engine *engine, const char *json);
+char *study_notetype_get(Engine *engine, const char *json);
+char *study_notetype_save(Engine *engine, const char *json);
+char *study_notetype_copy(Engine *engine, const char *json);
+char *study_notetype_delete(Engine *engine, const char *json);
 // Card actions.
 char *study_card_action(Engine *engine, const char *json);
 char *study_card_info(Engine *engine, const char *json);
