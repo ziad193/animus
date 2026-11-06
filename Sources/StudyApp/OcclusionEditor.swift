@@ -228,7 +228,9 @@ struct OcclusionEditor: View {
             .gesture(drawGesture(area))
             .onTapGesture(coordinateSpace: .local) { point in tap(point, area) }
         }
-        .frame(minHeight: 320, idealHeight: 460, maxHeight: 620)
+        // Smaller when editing from Browse, so the whole sheet fits a laptop-sized window.
+        .frame(minHeight: existing == nil ? 320 : 280, idealHeight: existing == nil ? 460 : 340,
+               maxHeight: existing == nil ? 620 : 380)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.04)))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }

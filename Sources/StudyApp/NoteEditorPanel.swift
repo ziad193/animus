@@ -347,6 +347,6 @@ private struct BoxEditSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 820, height: 720)
+        .frame(width: 820, height: 630)
     }
 }

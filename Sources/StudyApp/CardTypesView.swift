@@ -86,15 +86,23 @@ struct CardTypesView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Card types").font(.headline).padding(14)
-            List(types, selection: $selectedID) { type in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(type.name).lineLimit(1)
-                    Text("\(type.notes.formatted()) note\(type.notes == 1 ? "" : "s")\(type.isCloze ? " · fill in the blank" : "")")
-                        .font(.caption).foregroundStyle(.secondary)
+            ScrollViewReader { proxy in
+                List(types, selection: $selectedID) { type in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(type.name).lineLimit(1)
+                        Text("\(type.notes.formatted()) note\(type.notes == 1 ? "" : "s")\(type.isCloze ? " · fill in the blank" : "")")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .tag(type.id)
+                    .id(type.id)
                 }
-                .tag(type.id)
+                .listStyle(.sidebar)
+                // Bring the open card type into view (it may be far down the list).
+                .onChange(of: selectedID) { _, id in
+                    guard let id else { return }
+                    withAnimation { proxy.scrollTo(id, anchor: .center) }
+                }
             }
-            .listStyle(.sidebar)
             Divider()
             HStack(spacing: 6) {
                 Button {
@@ -427,6 +435,14 @@ struct CardTypesView: View {
         let names = spec.fields.map { $0.name.trimmingCharacters(in: .whitespaces).lowercased() }
         if names.contains(where: \.isEmpty) { error = "Every field needs a name."; return }
         if Set(names).count != names.count { error = "Two fields have the same name."; return }
+        // Anki refuses layouts that name a field that doesn't exist; say which card, plainly.
+        for (i, template) in spec.templates.enumerated() {
+            let problems = TemplatePreview.render(spec, template: i).problems.filter { $0.hasPrefix("There's no field") }
+            if let first = problems.first {
+                error = "“\(template.name)”: \(first) Fix the card layout, or add that field."
+                return
+            }
+        }
         if structural { await library.backup(force: true) }
         do {
             try await engine.saveNoteType(spec)
@@ -435,7 +451,10 @@ struct CardTypesView: View {
             await loadList(select: spec.id)
             await library.refresh()
         } catch {
+            // Engine messages can carry HTML line breaks.
             self.error = error.localizedDescription
+                .replacingOccurrences(of: "<br>", with: " ")
+                .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
         }
     }
 
