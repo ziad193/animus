@@ -85,11 +85,11 @@ struct ReferencePanel: View {
             Button(action: choose) {
                 Label("Add File", systemImage: "plus")
             }
-            .help("Attach a PDF, PowerPoint or Word file to this deck")
+            .tip("Attach a PDF, PowerPoint or Word file to this deck")
             Button(action: onClose) {
                 Image(systemName: "sidebar.right")
             }
-            .help("Hide this panel")
+            .tip("Hide this panel")
         }
         .buttonStyle(.hoverable)
         .padding(.horizontal, 10)
@@ -178,7 +178,7 @@ private struct FileTab: View {
             }
             .buttonStyle(.hoverable)
             .opacity(hovering || selected ? 1 : 0)
-            .help("Remove from this deck (the original file isn't touched)")
+            .tip("Remove from this deck (the original file isn't touched)")
         }
         .font(.callout.weight(selected ? .semibold : .regular))
         .padding(.horizontal, 9)
@@ -188,7 +188,7 @@ private struct FileTab: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: open)
         .onHover { hovering = $0 }
-        .help(url.lastPathComponent)
+        .tip(url.lastPathComponent)
     }
 }
 
@@ -271,7 +271,7 @@ private struct DocumentView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .help("Pages shows the file as it looks. Text lets you search and copy.")
+                .tip("Pages shows the file as it looks. Text lets you search and copy.")
             }
             if kind == .pdf || showingText {
                 SearchBox(query: $query,
@@ -287,23 +287,23 @@ private struct DocumentView: View {
             Spacer(minLength: 4)
             if kind == .pdf, pdf.pageCount > 0 {
                 Button { pdf.goPage(-1) } label: { Image(systemName: "chevron.up") }
-                    .help("Previous page")
+                    .tip("Previous page")
                     .disabled(pdf.page <= 1)
                 Text("\(pdf.page) / \(pdf.pageCount)")
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Button { pdf.goPage(1) } label: { Image(systemName: "chevron.down") }
-                    .help("Next page")
+                    .tip("Next page")
                     .disabled(pdf.page >= pdf.pageCount)
             }
             if kind == .pdf || showingText {
                 Divider().frame(height: 16)
                 Button { zoom(1 / 1.2) } label: { Image(systemName: "minus.magnifyingglass") }
-                    .help("Zoom out")
+                    .tip("Zoom out")
                 Button { kind == .pdf ? pdf.fit() : text.fit() } label: { Image(systemName: "arrow.left.and.right") }
-                    .help("Fit to width")
+                    .tip("Fit to width")
                 Button { zoom(1.2) } label: { Image(systemName: "plus.magnifyingglass") }
-                    .help("Zoom in")
+                    .tip("Zoom in")
             }
             if kind != .pdf {
                 Button {
@@ -311,7 +311,7 @@ private struct DocumentView: View {
                 } label: {
                     Image(systemName: "arrow.up.forward.app")
                 }
-                .help("Open in \(kind == .slides ? "PowerPoint or Keynote" : "Word or Pages")")
+                .tip("Open in \(kind == .slides ? "PowerPoint or Keynote" : "Word or Pages")")
             }
         }
         .buttonStyle(.hoverable)
@@ -354,10 +354,10 @@ private struct SearchBox: View {
             .frame(minWidth: 120, idealWidth: 200, maxWidth: 240)
             .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
             Button(action: previous) { Image(systemName: "chevron.left") }
-                .help("Previous match")
+                .tip("Previous match")
                 .disabled(query.isEmpty)
             Button(action: next) { Image(systemName: "chevron.right") }
-                .help("Next match (Return)")
+                .tip("Next match (Return)")
                 .disabled(query.isEmpty)
         }
     }

@@ -3003,3 +3003,142 @@ pub unsafe extern "C" fn study_free_string(s: *mut c_char) {
         drop(unsafe { CString::from_raw(s) });
     }
 }
+
+// ---------------------------------------------------------------------------
+// FSRS: tune the scheduler to how this student actually remembers
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Deserialize)]
+struct OptimizeRequest {
+    deck_id: i64,
+}
+
+#[derive(Serialize)]
+struct OptimizeJson {
+    /// Reviews FSRS learned from (Anki asks for a few hundred to be useful).
+    reviews: u32,
+    /// false = the current settings already fit as well (kept as they were).
+    changed: bool,
+    preset_name: String,
+}
+
+/// "YYYY-MM-DD" → milliseconds since 1970 (UTC midnight); empty = 0.
+fn date_to_ms(date: &str) -> i64 {
+    let parts: Vec<i64> = date.trim().split('-').filter_map(|p| p.parse().ok()).collect();
+    let [y, m, d] = parts[..] else { return 0 };
+    // Days from civil (Howard Hinnant's algorithm).
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    (era * 146097 + doe - 719468) * 86_400_000
+}
+
+/// Works out FSRS settings from the review history of every deck that shares
+/// this deck's preset, and saves them into the preset, like Anki's "Optimize".
+/// Can take a while on big collections.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_fsrs_optimize(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    use anki::deckconfig::{DeckConfigId, UpdateDeckConfigsRequest};
+    use anki::search::{JoinSearches, Negated, SearchNode, StateKind, TryIntoSearch};
+    use anki::services::SchedulerService;
+    use anki_proto::deck_config::UpdateDeckConfigsMode;
+    unsafe {
+        with_request(engine, json, |inner, req: OptimizeRequest| {
+            inner.current = None;
+            let col = &mut inner.col;
+            let info = col.get_deck_configs_for_update(DeckId(req.deck_id)).map_err(|e| e.to_string())?;
+            let current = info.current_deck.ok_or("that deck has no options (is it a filtered deck?)")?;
+            let mut config = col
+                .get_deck_config(DeckConfigId(current.config_id), true)
+                .map_err(|e| e.to_string())?
+                .ok_or("deck options are missing")?;
+            let search = if config.inner.param_search.trim().is_empty() {
+                SearchNode::Preset(config.name.clone())
+                    .and(SearchNode::State(StateKind::Suspended).negated())
+                    .try_into_search()
+                    .map_err(|e| e.to_string())?
+                    .to_string()
+            } else {
+                config.inner.param_search.clone()
+            };
+            let before = config.fsrs_params().clone();
+            let result = col
+                .compute_fsrs_params(anki_proto::scheduler::ComputeFsrsParamsRequest {
+                    search,
+                    current_params: before.clone(),
+                    ignore_revlogs_before_ms: date_to_ms(&config.inner.ignore_revlogs_before_date),
+                    num_of_relearning_steps: config.inner.relearn_steps.len() as u32,
+                    health_check: false,
+                })
+                .map_err(|e| e.to_string())?;
+            let changed = !result.params.is_empty() && result.params != before && result.fsrs_items > 0;
+            if changed {
+                config.inner.fsrs_params_6 = result.params;
+                let request = UpdateDeckConfigsRequest {
+                    target_deck_id: DeckId(req.deck_id),
+                    configs: vec![config.clone()],
+                    removed_config_ids: vec![],
+                    mode: UpdateDeckConfigsMode::Normal,
+                    card_state_customizer: info.card_state_customizer,
+                    limits: current.limits.unwrap_or_default(),
+                    new_cards_ignore_review_limit: info.new_cards_ignore_review_limit,
+                    apply_all_parent_limits: info.apply_all_parent_limits,
+                    fsrs: info.fsrs,
+                    fsrs_reschedule: false,
+                    fsrs_health_check: info.fsrs_health_check,
+                };
+                col.update_deck_configs(request).map_err(|e| e.to_string())?;
+            }
+            Ok(OptimizeJson { reviews: result.fsrs_items, changed, preset_name: config.name })
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Undo / redo for the Edit menu
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct UndoStatusJson {
+    /// e.g. "Answer Card"; None when there's nothing to undo.
+    undo: Option<String>,
+    redo: Option<String>,
+}
+
+/// What Undo and Redo would do right now. JSON: null.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_undo_status(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    unsafe {
+        with_request(engine, json, |inner, _: Option<i64>| {
+            let col = &inner.col;
+            Ok(UndoStatusJson {
+                undo: col.can_undo().map(|op| op.describe(col.tr())),
+                redo: col.can_redo().map(|op| op.describe(col.tr())),
+            })
+        })
+    }
+}
+
+/// Redoes the last undone change. JSON: null.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_redo(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    unsafe {
+        with_request(engine, json, |inner, _: Option<i64>| {
+            inner.current = None;
+            inner.col.redo().map_err(|e| format!("nothing to redo: {e}"))?;
+            Ok(true)
+        })
+    }
+}

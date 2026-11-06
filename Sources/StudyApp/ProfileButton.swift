@@ -22,7 +22,7 @@ struct ProfileButton: View {
         }
         .buttonStyle(.plain)
         .hoverLift(scale: 1.03)
-        .help("Switch profile, or add one for someone else or another subject")
+        .tip("Switch profile, or add one for someone else or another subject")
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             ProfileList { id in
                 showing = false
@@ -62,14 +62,14 @@ private struct ProfileList: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help(profile.id == profiles.activeID ? "The profile you're using" : "Switch to \(profile.name)")
+                    .tip(profile.id == profiles.activeID ? "The profile you're using" : "Switch to \(profile.name)")
                     Button { newName = profile.name; renaming = profile } label: { Image(systemName: "pencil") }
                         .buttonStyle(.hoverable)
-                        .help("Rename")
+                        .tip("Rename")
                     if profile.id != profiles.activeID && !profile.isOriginal {
                         Button { deleting = profile } label: { Image(systemName: "trash") }
                             .buttonStyle(.hoverable)
-                            .help("Delete this profile and its cards")
+                            .tip("Delete this profile and its cards")
                     }
                 }
                 .padding(.horizontal, 8)

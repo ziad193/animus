@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Small text and icon buttons (the kind macOS draws with no border).
@@ -107,4 +108,39 @@ struct HoverBorderedStyle: ButtonStyle {
 
 extension ButtonStyle where Self == HoverBorderedStyle {
     static var hoverBordered: HoverBorderedStyle { HoverBorderedStyle() }
+}
+
+// MARK: - Hover tips
+
+/// A hover tip (tooltip) that shows reliably.
+///
+/// SwiftUI's own `.tip()` re-registers its tip every time the view redraws,
+/// and these screens redraw a lot (hover highlights, ticking timers), which
+/// cancels the tip before it appears. This hands the tip to a plain AppKit
+/// view that stays put, and only touches it when the text actually changes.
+private struct TipView: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> TipNSView {
+        let view = TipNSView()
+        view.toolTip = text
+        return view
+    }
+
+    func updateNSView(_ view: TipNSView, context: Context) {
+        if view.toolTip != text { view.toolTip = text }
+    }
+
+    /// Only there for its tip (clicks go through: see `allowsHitTesting` below).
+    final class TipNSView: NSView {
+        override var acceptsFirstResponder: Bool { false }
+    }
+}
+
+extension View {
+    /// The hover tip for this control. Use instead of `.tip()`.
+    func tip(_ text: String) -> some View {
+        overlay(TipView(text: text).allowsHitTesting(false))
+            .accessibilityHint(Text(text))
+    }
 }

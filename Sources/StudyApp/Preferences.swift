@@ -130,7 +130,7 @@ struct AppearancePicker: View {
                         }
                         .buttonStyle(.plain)
                         .hoverLift(scale: 1.03)
-                        .help(choice.rawValue.capitalized)
+                        .tip(choice.rawValue.capitalized)
                     }
                 }
             }
@@ -264,7 +264,7 @@ private struct GeneralPreferences: View {
                 }
                 Spacer()
                 Button("Run Setup Again…") { setupDone = false }
-                    .help("Your cards stay as they are")
+                    .tip("Your cards stay as they are")
             }
         }
         .padding(24)
@@ -398,7 +398,7 @@ private struct StudyingPreferences: View {
     }
 }
 
-/// The heatmap's colour (also picked from the dots beside the heatmap).
+/// The heatmap's colour. Lives here only, so the heatmap itself stays clean.
 struct HeatmapColorPicker: View {
     @AppStorage(HeatmapColor.key) private var choice = HeatmapColor.blue
 
@@ -421,7 +421,7 @@ struct HeatmapColorPicker: View {
                                           lineWidth: choice == option ? 2 : 1))
                     }
                     .buttonStyle(.plain)
-                    .help(option.title)
+                    .tip(option.title)
                 }
             }
         }

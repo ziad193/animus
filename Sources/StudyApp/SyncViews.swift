@@ -21,7 +21,7 @@ struct SyncButton: View {
             }
         }
         .buttonStyle(.automatic)
-        .help(sync.isSignedIn ? "Sync now · \(sync.summary)" : "Sync with AnkiWeb")
+        .tip(sync.isSignedIn ? "Sync now · \(sync.summary)" : "Sync with AnkiWeb")
     }
 }
 

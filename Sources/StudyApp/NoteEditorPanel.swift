@@ -98,13 +98,13 @@ struct NoteEditorPanel: View {
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.hoverable)
-                        .help("Edit this card type's fields, layout and styling")
+                        .tip("Edit this card type's fields, layout and styling")
                         Spacer()
                         Toggle("Show HTML", isOn: $showHTML)
                             .toggleStyle(.switch)
                             .controlSize(.mini)
                             .font(.caption)
-                            .help("See and edit the formatting code behind each field")
+                            .tip("See and edit the formatting code behind each field")
                         if let deck = Deck.find(note.deckID, in: decks) {
                             Label(deck.displayPath, systemImage: "rectangle.stack")
                                 .font(.subheadline)
@@ -121,7 +121,7 @@ struct NoteEditorPanel: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .hoverGlow()
-                        .help("Move, add or remove the boxes hiding parts of this picture")
+                        .tip("Move, add or remove the boxes hiding parts of this picture")
                     }
                     ForEach($drafts) { $draft in
                         // The boxes and picture are edited with Edit Boxes, not as text.
@@ -203,7 +203,7 @@ struct NoteEditorPanel: View {
             .hoverGlow()
             .keyboardShortcut("s", modifiers: .command)
             .disabled(!changed)
-            .help("Save changes (⌘S)")
+            .tip("Save changes (⌘S)")
         }
         .font(.callout)
         .padding(12)
@@ -315,7 +315,7 @@ private struct FieldEditor: View {
             Image(systemName: symbol).frame(width: 22, height: 18)
         }
         .buttonStyle(.hoverable)
-        .help(help)
+        .tip(help)
     }
 }
 

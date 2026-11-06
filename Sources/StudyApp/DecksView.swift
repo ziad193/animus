@@ -90,6 +90,13 @@ struct DecksView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .iterumShowAddCards)) { _ in openAddCards() }
         // A filtered deck you just made opens straight into studying.
+        // Test collections only: open a deck's Options straight away, for on-screen checks.
+        .task(id: decks.first?.id) {
+            if Library.isTestCollection, ProcessInfo.processInfo.environment["ITERUM_TEST_OPTIONS"] != nil,
+               deckActions.options == nil, let first = decks.first {
+                deckActions.options = first
+            }
+        }
         .onChange(of: deckActions.createdFiltered) { _, id in
             if let id { select(.deck(id)); deckActions.createdFiltered = nil }
         }
@@ -156,11 +163,11 @@ struct DecksView: View {
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button(action: goBack) { Label("Back", systemImage: "chevron.left") }
-                    .help("Back (⌘[)")
+                    .tip("Back (⌘[)")
                     .disabled(backStack.isEmpty)
                     .buttonStyle(.automatic)
                 Button(action: goForward) { Label("Forward", systemImage: "chevron.right") }
-                    .help("Forward (⌘])")
+                    .tip("Forward (⌘])")
                     .disabled(forwardStack.isEmpty)
                     .buttonStyle(.automatic)
             }
@@ -359,20 +366,20 @@ private struct TodayPage: View {
                     } label: {
                         Label(arranging ? "Done Arranging" : "Arrange Home", systemImage: arranging ? "checkmark" : "rectangle.3.group")
                     }
-                    .help("Change the order of the sections above, or hide ones you don't use")
+                    .tip("Change the order of the sections above, or hide ones you don't use")
                     Button {
                         openSettings()
                     } label: {
                         Label("Preferences", systemImage: "gearshape")
                     }
-                    .help("Appearance, when your study day starts, the timer and more (⌘,)")
+                    .tip("Appearance, when your study day starts, the timer and more (⌘,)")
                     Button {
                         Task { await sync.syncNow() }
                     } label: {
                         Label(sync.isSignedIn ? sync.summary : "Sync with AnkiWeb", systemImage: "arrow.triangle.2.circlepath")
                             .lineLimit(1)
                     }
-                    .help(sync.isSignedIn ? "Sync now" : "Sign in to keep this Mac, Anki and your phone in step")
+                    .tip(sync.isSignedIn ? "Sync now" : "Sign in to keep this Mac, Anki and your phone in step")
                     Spacer()
                 }
                 .controlSize(.large)
@@ -505,7 +512,7 @@ private struct ActionButton: View {
         // Continue (the blue one) brightens; the rest get a soft fill. All lift a little.
         .hoverLift(scale: 1.02)
         .onHover { hovering = $0 }
-        .help(help)
+        .tip(help)
     }
 }
 
@@ -595,7 +602,7 @@ private struct TodayProgress: View {
                 HStack(spacing: 16) {
                     Label(done == 1 ? "1 card studied" : "\(done) cards studied", systemImage: "checkmark.circle")
                     Label("\(StudyClock.format(clock.todaySeconds)) today", systemImage: "stopwatch")
-                        .help("This week: \(StudyClock.format(clock.weekSeconds)). The timer pauses on breaks, when you switch apps, or after 3 idle minutes.")
+                        .tip("This week: \(StudyClock.format(clock.weekSeconds)). The timer pauses on breaks, when you switch apps, or after 3 idle minutes.")
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -641,7 +648,7 @@ struct StatTile: View {
         .padding(.vertical, 12)
         .frame(minWidth: FlowRow<EmptyView>.itemWidth)
         .background(RoundedRectangle(cornerRadius: 14).fill(color.opacity(dim ? 0.04 : 0.1)))
-        .help(help)
+        .tip(help)
     }
 }
 
@@ -694,7 +701,7 @@ private struct DeckPage: View {
                     .padding(.vertical, 4)
             }
             .controlSize(.large)
-            .help("See, search and edit every card in this deck")
+            .tip("See, search and edit every card in this deck")
             DeckMenu(deck: deck, size: 17)
             if deck.dueToday > 0 {
                 Button {
@@ -709,7 +716,7 @@ private struct DeckPage: View {
                 .hoverGlow()
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
-                .help(deck.children.isEmpty ? "Study this deck (Return)" : "Study this deck and all its sections (Return)")
+                .tip(deck.children.isEmpty ? "Study this deck (Return)" : "Study this deck and all its sections (Return)")
             } else {
                 Label("All caught up", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
@@ -737,7 +744,7 @@ private struct TileGrid: View {
                         Label("New Deck", systemImage: "plus")
                     }
                     .buttonStyle(.hoverable)
-                    .help("Make a new, empty deck (or a section inside another deck)")
+                    .tip("Make a new, empty deck (or a section inside another deck)")
                 }
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 210, maximum: 320), spacing: 14)], spacing: 14) {
@@ -769,7 +776,7 @@ private struct DeckTile: View {
                         Label("Filtered", systemImage: "line.3.horizontal.decrease.circle")
                             .font(.caption.weight(.medium))
                             .foregroundStyle(.secondary)
-                            .help("A filtered deck: it borrows cards, which go back when you finish it")
+                            .tip("A filtered deck: it borrows cards, which go back when you finish it")
                     }
                     Spacer()
                     if deck.dueToday > 0 {
@@ -806,7 +813,7 @@ private struct DeckTile: View {
         .onHover { over in
             withAnimation(.easeOut(duration: 0.15)) { hovering = over }
         }
-        .help(deck.name.replacingOccurrences(of: "::", with: " › "))
+        .tip(deck.name.replacingOccurrences(of: "::", with: " › "))
     }
 }
 
@@ -862,7 +869,7 @@ struct CountPills: View {
                 .padding(.vertical, compact ? 1 : 3)
                 .background(Capsule().fill(color.opacity(value == 0 ? 0.06 : 0.16)))
                 .foregroundStyle(value == 0 ? Color.secondary.opacity(0.6) : color)
-                .help("\(value) \(label.lowercased())")
+                .tip("\(value) \(label.lowercased())")
         }
     }
 
@@ -983,7 +990,7 @@ private struct ToolbarSearchField: View {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("Clear the search")
+                .tip("Clear the search")
             }
         }
         .padding(.horizontal, 8)
@@ -1161,7 +1168,7 @@ private struct TabButton: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Close this deck")
+                .tip("Close this deck")
             }
         }
         .padding(.horizontal, 12)
@@ -1176,6 +1183,6 @@ private struct TabButton: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(.default, action)
-        .help(title)
+        .tip(title)
     }
 }

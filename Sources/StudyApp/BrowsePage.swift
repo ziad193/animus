@@ -41,7 +41,7 @@ struct BrowsePage: View {
                 Toggle(isOn: $showReference.animation()) {
                     Label("Slides & Notes", systemImage: "sidebar.right")
                 }
-                .help("Show a PDF, PowerPoint or Word file beside your cards")
+                .tip("Show a PDF, PowerPoint or Word file beside your cards")
             }
         }
         .task(id: searchKey) {
@@ -50,6 +50,14 @@ struct BrowsePage: View {
             if !model.query.isEmpty { try? await Task.sleep(for: .milliseconds(180)) }
             guard !Task.isCancelled, let engine = library.engine else { return }
             await model.search(engine: engine, decks: decks)
+        }
+        // Edit › Undo or Redo may have changed what's listed.
+        .onChange(of: library.undoGeneration) {
+            Task {
+                guard let engine = library.engine else { return }
+                model.clearUndo()
+                await model.search(engine: engine, decks: decks, force: true)
+            }
         }
         .sheet(item: $sheet) { which in
             BrowseToolSheet(which: which, cards: model.selectedIDs, scope: model.searchText(decks: decks),
@@ -137,7 +145,7 @@ struct BrowsePage: View {
                 .overlay(Circle().strokeBorder(model.flagColor == number ? color : .clear, lineWidth: 1.5))
         }
         .buttonStyle(.hoverable)
-        .help(name)
+        .tip(name)
     }
 
     private var deckAndTips: some View {
@@ -150,13 +158,13 @@ struct BrowsePage: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
-            .help("Cards: one row per card. Notes: one row per note (a note can make several cards, e.g. Both Ways or fill-in-the-blank).")
+            .tip("Cards: one row per card. Notes: one row per note (a note can make several cards, e.g. Both Ways or fill-in-the-blank).")
             Button {
                 sheet = .duplicates
             } label: {
                 Label("Duplicates", systemImage: "square.on.square")
             }
-            .help("Find notes with the same front, in what's shown now")
+            .tip("Find notes with the same front, in what's shown now")
             Text("In").foregroundStyle(.secondary)
             DeckPickerButton(decks: decks, selection: $model.deckID, emptyTitle: "All decks", allowsAll: true)
                 .frame(width: 260)
@@ -224,7 +232,7 @@ struct BrowsePage: View {
                 Label("Flag", systemImage: "flag")
             }
             .fixedSize()
-            .help("Flag with a colour (⌘1–7)")
+            .tip("Flag with a colour (⌘1–7)")
             Menu {
                 Button("Add Tags…") { sheet = .addTags }
                 Button("Remove Tags…") { sheet = .removeTags }
@@ -232,14 +240,14 @@ struct BrowsePage: View {
                 Label("Tags", systemImage: "tag")
             }
             .fixedSize()
-            .help("Add or remove tags on the selected notes")
+            .tip("Add or remove tags on the selected notes")
             Button {
                 Task { await toggleSuspend() }
             } label: {
                 Label(model.allSelectedSuspended ? "Unsuspend" : "Suspend",
                       systemImage: model.allSelectedSuspended ? "play.circle" : "pause.circle")
             }
-            .help(model.allSelectedSuspended ? "Bring these cards back into your reviews" : "Keep these cards out of your reviews for now")
+            .tip(model.allSelectedSuspended ? "Bring these cards back into your reviews" : "Keep these cards out of your reviews for now")
             Button {
                 showMove.toggle()
             } label: {
@@ -262,13 +270,13 @@ struct BrowsePage: View {
                 Label("More", systemImage: "ellipsis.circle")
             }
             .fixedSize()
-            .help("Set due date, reset, reposition, find & replace, change card type")
+            .tip("Set due date, reset, reposition, find & replace, change card type")
             Button(role: .destructive) {
                 confirmDelete = true
             } label: {
                 Label("Delete", systemImage: "trash")
             }
-            .help("Delete the selected notes")
+            .tip("Delete the selected notes")
         }
         .lineLimit(1)
         .fixedSize()
@@ -500,7 +508,7 @@ private struct FrontCell: View {
             Circle()
                 .fill(row.map { StateStyle.color($0.state) } ?? .clear)
                 .frame(width: 7, height: 7)
-                .help(row.map { StateStyle.title($0.state) } ?? "")
+                .tip(row.map { StateStyle.title($0.state) } ?? "")
             if let flag = row?.flag, flag > 0 {
                 Image(systemName: "flag.fill")
                     .font(.caption2)
@@ -541,7 +549,7 @@ private struct PlainCell: View {
         Text(lastPart ? (text.components(separatedBy: "::").last ?? text) : StateStyle.tidy(text))
             .lineLimit(1)
             .foregroundStyle(.secondary)
-            .help(lastPart ? text.replacingOccurrences(of: "::", with: " › ") : "")
+            .tip(lastPart ? text.replacingOccurrences(of: "::", with: " › ") : "")
     }
 }
 

@@ -390,7 +390,7 @@ private struct DuplicatesSheet: View {
                     Spacer()
                     Button(tagged ? "Tagged “duplicate”" : "Tag All as “duplicate”") { Task { await tagAll(groups) } }
                         .disabled(tagged)
-                        .help("Adds the tag “duplicate” so you can find and tidy them later")
+                        .tip("Adds the tag “duplicate” so you can find and tidy them later")
                 }
                 .padding(14)
             }

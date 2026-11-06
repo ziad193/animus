@@ -183,7 +183,7 @@ struct TimersButton: View {
             }
         }
         .buttonStyle(.plain)
-        .help("Pomodoro and study timer")
+        .tip("Pomodoro and study timer")
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             TimersPanel()
         }
@@ -263,7 +263,7 @@ struct PomodoroPanel: View {
                     Image(systemName: explaining ? "xmark.circle.fill" : "questionmark.circle")
                 }
                 .buttonStyle(.hoverable)
-                .help(explaining ? "Back to the timer" : "What is a Pomodoro timer?")
+                .tip(explaining ? "Back to the timer" : "What is a Pomodoro timer?")
             }
             if explaining {
                 // Takes the timer's place (a pop-up from a pop-up would close this one,
@@ -300,7 +300,7 @@ struct PomodoroPanel: View {
 
         HStack(spacing: 10) {
             Button(action: timer.reset) { Image(systemName: "arrow.counterclockwise") }
-                .help("Restart this phase")
+                .tip("Restart this phase")
             Button(action: timer.toggle) {
                 Label(timer.isRunning ? "Pause" : "Start", systemImage: timer.isRunning ? "pause.fill" : "play.fill")
                     .frame(width: 90)
@@ -309,7 +309,7 @@ struct PomodoroPanel: View {
             .hoverGlow()
             .tint(timer.phase.color)
             Button(action: timer.skip) { Image(systemName: "forward.end.fill") }
-                .help(timer.phase.isBreak ? "Skip the break" : "Skip to the break")
+                .tip(timer.phase.isBreak ? "Skip the break" : "Skip to the break")
         }
         .controlSize(.large)
 
@@ -490,7 +490,7 @@ struct PomodoroTaskList: View {
                 Button(action: add) { Image(systemName: "plus") }
                     .buttonStyle(.hoverable)
                     .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .help("Add task")
+                    .tip("Add task")
             }
             if !tasks.items.isEmpty {
                 ScrollView {
@@ -525,7 +525,7 @@ private struct TaskRow: View {
                     .font(.body)
             }
             .buttonStyle(.plain)
-            .help(item.done ? "Mark as not done" : "Mark as done")
+            .tip(item.done ? "Mark as not done" : "Mark as done")
             Text(item.title)
                 .strikethrough(item.done)
                 .foregroundStyle(item.done ? .secondary : .primary)
@@ -536,7 +536,7 @@ private struct TaskRow: View {
             }
             .buttonStyle(.hoverable)
             .opacity(hovering ? 1 : 0.35)
-            .help("Delete task")
+            .tip("Delete task")
         }
         .font(.callout)
         .padding(.vertical, 3)

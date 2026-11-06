@@ -50,7 +50,7 @@ struct RichFieldBox: View {
             .buttonStyle(.hoverable)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Text colour or highlight")
+            .tip("Text colour or highlight")
             tool("list.bullet", "Bullet list") { handle.format("insertUnorderedList") }
             tool("list.number", "Numbered list") { handle.format("insertOrderedList") }
             tool("eraser", "Clear formatting") { handle.format("removeFormat") }
@@ -74,7 +74,7 @@ struct RichFieldBox: View {
                     .frame(height: 22)
             }
             .buttonStyle(.hoverable)
-            .help(pinned ? "This field keeps its text after you add a card. Click to stop."
+            .tip(pinned ? "This field keeps its text after you add a card. Click to stop."
                          : "Keep this field's text for the next card (handy for a source or topic)")
         }
         .font(.system(size: 12))
@@ -88,7 +88,7 @@ struct RichFieldBox: View {
             Image(systemName: symbol).frame(width: 24, height: 22)
         }
         .buttonStyle(.hoverable)
-        .help(help)
+        .tip(help)
     }
 
     private func attach() {
@@ -130,7 +130,7 @@ private struct AudioRecordButton: View {
             .frame(minWidth: 24, minHeight: 22)
         }
         .buttonStyle(.hoverable)
-        .help(recorder.isRecording ? "Stop and add the recording" : "Record audio")
+        .tip(recorder.isRecording ? "Stop and add the recording" : "Record audio")
         .popover(isPresented: Binding(get: { recorder.problem != nil }, set: { if !$0 { recorder.problem = nil } })) {
             Text(recorder.problem ?? "").padding(14).frame(width: 260)
         }

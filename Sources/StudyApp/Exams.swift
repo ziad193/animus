@@ -173,7 +173,7 @@ private struct ExamCard: View {
                 Image(systemName: "pencil")
             }
             .buttonStyle(.hoverable)
-            .help("Edit or remove this exam")
+            .tip("Edit or remove this exam")
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.03)))

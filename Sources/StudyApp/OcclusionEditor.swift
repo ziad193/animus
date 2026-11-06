@@ -86,7 +86,7 @@ struct OcclusionEditor: View {
                     .hoverGlow()
                 Button { paste() } label: { Label("Paste Picture", systemImage: "doc.on.clipboard") }
                     .keyboardShortcut("v", modifiers: .command)
-                    .help("Use a screenshot or picture you've copied (⌘V)")
+                    .tip("Use a screenshot or picture you've copied (⌘V)")
             }
             .controlSize(.large)
             Text("Or drag one in here. Tip: take a screenshot of a lecture slide with ⇧⌘4, holding Control to copy it.")
@@ -175,16 +175,16 @@ struct OcclusionEditor: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
-            .help("Draw boxes or ovals, or select ones you've drawn to move, group or delete them")
+            .tip("Draw boxes or ovals, or select ones you've drawn to move, group or delete them")
 
             Button { group() } label: { Label("Group", systemImage: "square.on.square") }
                 .disabled(selected.count < 2)
-                .help("Hide the selected boxes together on one card (e.g. a label and its line)")
+                .tip("Hide the selected boxes together on one card (e.g. a label and its line)")
             Button { ungroup() } label: { Label("Ungroup", systemImage: "square.split.2x1") }
                 .disabled(!selectionIsGrouped)
             Button(role: .destructive) { deleteSelected() } label: { Label("Delete", systemImage: "trash") }
                 .disabled(selected.isEmpty)
-                .help("Delete the selected boxes")
+                .tip("Delete the selected boxes")
             Button { if !boxes.isEmpty { boxes.removeLast(); renumber() } } label: {
                 Label("Undo Box", systemImage: "arrow.uturn.backward")
             }
@@ -195,7 +195,7 @@ struct OcclusionEditor: View {
                 .foregroundStyle(.secondary)
             if existing == nil {
                 Button { image = nil; imageURL = nil; boxes = [] } label: { Label("Other Picture", systemImage: "photo") }
-                    .help("Start again with a different picture")
+                    .tip("Start again with a different picture")
             }
         }
         .buttonStyle(.hoverable)
@@ -415,7 +415,7 @@ struct OcclusionEditor: View {
             .controlSize(.large)
             .keyboardShortcut(.return, modifiers: .command)
             .disabled(boxes.isEmpty || (deckID == nil && existing == nil) || working)
-            .help("Add (⌘Return)")
+            .tip("Add (⌘Return)")
         }
     }
 

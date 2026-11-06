@@ -302,7 +302,7 @@ struct CollectionToolsView: View {
                                 Text("\(media.missing.count) missing file\(media.missing.count == 1 ? "" : "s") used by \(media.missingNotes) note\(media.missingNotes == 1 ? "" : "s")")
                                 Spacer()
                                 Button("Tag Those Notes") { Task { await tagMissing() } }
-                                    .help("Adds the tag “missing-media” so you can find them in Browse")
+                                    .tip("Adds the tag “missing-media” so you can find them in Browse")
                             }
                         }
                     }

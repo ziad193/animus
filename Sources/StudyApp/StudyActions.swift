@@ -52,7 +52,7 @@ struct CardActionBar: View {
             .buttonStyle(.hoverable)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Flag this card with a colour (⌘1–7). Find flagged cards in Browse.")
+            .tip("Flag this card with a colour (⌘1–7). Find flagged cards in Browse.")
 
             barButton(card.marked ? "Marked" : "Mark", card.marked ? "star.fill" : "star",
                       "Mark this note to come back to it (*)", tint: card.marked ? .yellow : nil) {
@@ -80,7 +80,7 @@ struct CardActionBar: View {
             .buttonStyle(.hoverable)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Set due date, reset to new, or delete")
+            .tip("Set due date, reset to new, or delete")
             Spacer()
         }
         .font(.callout)
@@ -90,7 +90,7 @@ struct CardActionBar: View {
                            action: @escaping () -> Void) -> some View {
         Button(action: action) { chip(title, symbol, tint: tint) }
             .buttonStyle(.hoverable)
-            .help(help)
+            .tip(help)
     }
 
     private func chip(_ title: String, _ symbol: String, tint: Color? = nil) -> some View {

@@ -47,7 +47,7 @@ struct RetentionTable: View {
                 Text("\(passed.formatted()) of \(total.formatted())").font(.caption2).foregroundStyle(.secondary)
             }
         }
-        .help(total == 0 ? "No reviews" : "\(passed) remembered, \(failed) forgotten")
+        .tip(total == 0 ? "No reviews" : "\(passed) remembered, \(failed) forgotten")
     }
 }
 

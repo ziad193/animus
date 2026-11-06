@@ -149,6 +149,7 @@ struct DeckOptionsView: View {
                         Slider(value: s.desiredRetention, in: 0.7...0.99, step: 0.01)
                             .frame(width: 180)
                     }
+                    optimizeRow
                 } else {
                     row("Starting ease: \(Int((s.wrappedValue.initialEase * 100).rounded()))%",
                         "How fast intervals grow when you press Good. 250% is the usual.") {
@@ -240,6 +241,58 @@ struct DeckOptionsView: View {
             .disabled(settings == nil || saving || Steps.parse(learnText) == nil || Steps.parse(relearnText) == nil)
         }
         .padding(16)
+    }
+
+    // MARK: FSRS optimise
+
+    @State private var optimizing = false
+    @State private var optimizeResult: String?
+
+    /// Fits FSRS to how you actually remember, from your past reviews.
+    private var optimizeRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            row("Fit to my memory",
+                "Looks at your past reviews in every deck using these settings and tunes FSRS to how you actually remember. Worth doing about once a month.") {
+                Button {
+                    Task { await optimize() }
+                } label: {
+                    if optimizing {
+                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Working…") }
+                    } else {
+                        Label("Optimise", systemImage: "wand.and.stars")
+                    }
+                }
+                .disabled(optimizing)
+            }
+            if let optimizeResult {
+                Label(optimizeResult, systemImage: "checkmark.circle.fill")
+                    .font(.callout).foregroundStyle(.green)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func optimize() async {
+        guard let engine = library.engine else { return }
+        optimizing = true
+        optimizeResult = nil
+        defer { optimizing = false }
+        await library.backup(force: false)
+        do {
+            let result = try await engine.optimizeFSRS(deck: deck.id)
+            let reviews = result.reviews.formatted()
+            if result.reviews < 400 {
+                optimizeResult = result.changed
+                    ? "Tuned from \(reviews) reviews. It gets more accurate once you have a few hundred."
+                    : "Only \(reviews) reviews so far. Keep studying and try again once you have a few hundred."
+            } else {
+                optimizeResult = result.changed
+                    ? "Tuned to your memory from \(reviews) reviews (all decks using “\(result.presetName)”)."
+                    : "Checked \(reviews) reviews: your current settings already fit you best."
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     // MARK: Logic

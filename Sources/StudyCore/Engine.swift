@@ -937,6 +937,40 @@ public actor Engine {
         let _: Bool = try call(study_notetype_delete, id)
     }
 
+    // MARK: FSRS
+
+    public struct OptimizeResult: Decodable, Sendable {
+        /// Reviews FSRS learned from.
+        public let reviews: Int
+        /// false = the current settings were already the best fit.
+        public let changed: Bool
+        public let presetName: String
+        enum CodingKeys: String, CodingKey { case reviews, changed, presetName = "preset_name" }
+    }
+
+    /// Tunes FSRS to your own review history, for every deck sharing this deck's settings.
+    public func optimizeFSRS(deck: Int64) throws -> OptimizeResult {
+        struct Request: Encodable { let deck_id: Int64 }
+        return try call(study_fsrs_optimize, Request(deck_id: deck))
+    }
+
+    // MARK: Undo / redo
+
+    public struct UndoStatus: Decodable, Sendable, Equatable {
+        /// e.g. "Answer Card"; nil when there's nothing to undo.
+        public let undo: String?
+        public let redo: String?
+        public init(undo: String?, redo: String?) { self.undo = undo; self.redo = redo }
+    }
+
+    public func undoStatus() throws -> UndoStatus {
+        try call(study_undo_status, Optional<Int64>.none)
+    }
+
+    public func redo() throws {
+        let _: Bool = try call(study_redo, Optional<Int64>.none)
+    }
+
     // MARK: Card actions
 
     private struct CardAction: Encodable {

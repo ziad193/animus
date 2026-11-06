@@ -66,7 +66,7 @@ struct DeckMenu: View {
         .buttonStyle(.hoverable)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(deck.filtered ? "Rebuild, return cards or delete “\(deck.shortName)”"
+        .tip(deck.filtered ? "Rebuild, return cards or delete “\(deck.shortName)”"
                             : "Rename, options, export or delete “\(deck.shortName)”")
     }
 

@@ -110,11 +110,11 @@ struct CardTypesView: View {
                     copying = true
                 } label: { Label("New from This", systemImage: "plus.square.on.square") }
                     .disabled(selectedID == nil)
-                    .help("Make a new card type starting as a copy of the selected one")
+                    .tip("Make a new card type starting as a copy of the selected one")
                 Spacer()
                 Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }
                     .disabled(selectedID == nil || types.count < 2)
-                    .help("Delete this card type and its notes")
+                    .tip("Delete this card type and its notes")
             }
             .buttonStyle(.hoverable)
             .padding(10)
@@ -197,12 +197,12 @@ struct CardTypesView: View {
                                 Text("New").font(.caption).foregroundStyle(.tint)
                             }
                             Button { move(field: index, by: -1) } label: { Image(systemName: "chevron.up") }
-                                .disabled(index == 0).help("Move up")
+                                .disabled(index == 0).tip("Move up")
                             Button { move(field: index, by: 1) } label: { Image(systemName: "chevron.down") }
-                                .disabled(index == current.fields.count - 1).help("Move down")
+                                .disabled(index == current.fields.count - 1).tip("Move down")
                             Button(role: .destructive) { spec?.fields.remove(at: index) } label: { Image(systemName: "minus.circle") }
                                 .disabled(current.fields.count <= (current.isCloze ? 1 : 1))
-                                .help(field.ord == nil ? "Remove" : "Remove this field. Its text is deleted from every note when you save.")
+                                .tip(field.ord == nil ? "Remove" : "Remove this field. Its text is deleted from every note when you save.")
                         }
                         .buttonStyle(.hoverable)
                     }
@@ -279,13 +279,13 @@ struct CardTypesView: View {
                                                      back: "{{FrontSide}}\n\n<hr id=answer>\n\n{{\(first)}}"))
                         templateIndex = (spec?.templates.count ?? 1) - 1
                     } label: { Label("Add Card", systemImage: "plus") }
-                    .help("Each note makes one card per layout, e.g. a reverse card")
+                    .tip("Each note makes one card per layout, e.g. a reverse card")
                     Button(role: .destructive) {
                         spec?.templates.remove(at: index)
                         templateIndex = max(0, index - 1)
                     } label: { Label("Remove", systemImage: "minus.circle") }
                     .disabled(current.templates.count < 2)
-                    .help("Remove this layout. Cards made from it are deleted when you save.")
+                    .tip("Remove this layout. Cards made from it are deleted when you save.")
                 }
             }
             .buttonStyle(.hoverable)
@@ -332,11 +332,11 @@ struct CardTypesView: View {
                         .font(.caption.monospaced())
                         .padding(.horizontal, 6).padding(.vertical, 3)
                         .background(Capsule().fill(Color.primary.opacity(0.06)))
-                        .help("On the back: shows the whole front")
+                        .tip("On the back: shows the whole front")
                 }
             }
         }
-        .help("Copy these into a layout to show a field. {{type:Field}} adds a box to type the answer; {{hint:Field}} hides it behind a click.")
+        .tip("Copy these into a layout to show a field. {{type:Field}} adds a box to type the answer; {{hint:Field}} hides it behind a click.")
     }
 
     private func preview(_ current: NoteTypeSpec, template index: Int) -> some View {

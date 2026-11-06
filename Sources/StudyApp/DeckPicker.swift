@@ -84,7 +84,7 @@ struct DeckPickerButton: View {
         }
         .buttonStyle(.plain)
         .hoverLift(scale: 1.01)
-        .help("Choose a deck — type to search")
+        .tip("Choose a deck — type to search")
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             DeckChooser(decks: decks, selection: selection, allowsAll: allowsAll, allTitle: emptyTitle, create: create) { id in
                 selection = id
@@ -123,7 +123,7 @@ struct RecentDeckChips: View {
                 }
                 .buttonStyle(.plain)
                 .hoverLift(scale: 1.05)
-                .help(deck.displayPath)
+                .tip(deck.displayPath)
             }
         }
         .onAppear(perform: reload)

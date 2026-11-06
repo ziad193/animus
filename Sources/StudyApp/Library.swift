@@ -233,6 +233,42 @@ final class Library {
         } catch {
             state = .failed(error.localizedDescription)
         }
+        await refreshUndo()
+    }
+
+    // MARK: Undo / redo (the Edit menu)
+
+    /// What Edit › Undo and Redo would do, e.g. "Answer Card".
+    private(set) var undoStatus = Engine.UndoStatus(undo: nil, redo: nil)
+    /// Goes up after an undo or redo from the Edit menu, so open screens reload.
+    private(set) var undoGeneration = 0
+
+    func refreshUndo() async {
+        guard let engine else { return }
+        let status = (try? await engine.undoStatus()) ?? .init(undo: nil, redo: nil)
+        if status != undoStatus { undoStatus = status }
+    }
+
+    func undoFromMenu() async {
+        guard let engine, undoStatus.undo != nil else { return }
+        do {
+            try await engine.undo()
+        } catch {
+            notice = error.localizedDescription
+        }
+        undoGeneration += 1
+        await refresh()
+    }
+
+    func redoFromMenu() async {
+        guard let engine, undoStatus.redo != nil else { return }
+        do {
+            try await engine.redo()
+        } catch {
+            notice = error.localizedDescription
+        }
+        undoGeneration += 1
+        await refresh()
     }
 
     private func open() async {

@@ -32,7 +32,7 @@ struct StatsPage: View {
                         DeckPickerButton(decks: decks, selection: $scopeDeck, emptyTitle: "All decks", allowsAll: true)
                             .frame(width: 240)
                     }
-                    .help("Show stats for one deck (and its sections), or all of them")
+                    .tip("Show stats for one deck (and its sections), or all of them")
                 }
                 if let stats {
                     StatTiles(stats: stats)
@@ -314,34 +314,18 @@ struct Heatmap: View {
         HStack(spacing: 6) {
             Button { year -= 1 } label: { Image(systemName: "chevron.left") }
                 .disabled(year <= min(grid.firstYear, thisYear))
-                .help("Previous year")
+                .tip("Previous year")
             Text(String(year))
                 .font(.callout.weight(.semibold).monospacedDigit())
             Button { year += 1 } label: { Image(systemName: "chevron.right") }
                 .disabled(year >= thisYear)
-                .help("Next year")
+                .tip("Next year")
         }
         .buttonStyle(.hoverable)
     }
 
     private var legend: some View {
         HStack(spacing: 4) {
-            // Pick the heatmap's colour right here (also in Preferences).
-            HStack(spacing: 5) {
-                ForEach(HeatmapColor.allCases) { choice in
-                    Button {
-                        colorChoice = choice
-                    } label: {
-                        Circle()
-                            .fill(choice.swatch)
-                            .frame(width: 12, height: 12)
-                            .overlay(Circle().strokeBorder(Color.primary.opacity(colorChoice == choice ? 0.9 : 0), lineWidth: 2).padding(-3))
-                    }
-                    .buttonStyle(.plain)
-                    .help("\(choice.title) heatmap")
-                }
-            }
-            .padding(.trailing, 12)
             Text("Less").font(.caption2).foregroundStyle(.secondary)
             RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(scheme == .dark ? 0.09 : 0.06)).frame(width: cell, height: cell)
             ForEach(Array(ramp.enumerated()), id: \.offset) { _, c in
@@ -512,7 +496,7 @@ private struct CardBreakdown: View {
                         RoundedRectangle(cornerRadius: 4)
                             .fill(part.2)
                             .frame(width: max(4, (geo.size.width - 8) * CGFloat(part.1) / CGFloat(total)))
-                            .help("\(part.0): \(part.1) cards")
+                            .tip("\(part.0): \(part.1) cards")
                     }
                 }
             }
@@ -527,7 +511,7 @@ private struct CardBreakdown: View {
                             Text(part.0).font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    .help(part.3)
+                    .tip(part.3)
                 }
             }
         }
@@ -667,22 +651,16 @@ enum HeatmapColor: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
 
-    /// Pale → deep in light mode; dim → bright in dark mode.
+    /// Always pale → deep: lighter for quiet days, darker for busy ones (in dark mode too).
     func ramp(dark: Bool) -> [Color] {
         let hexes: [String]
-        switch (self, dark) {
-        case (.blue, false): hexes = ["#cfe1fb", "#7eb0f0", "#2f78dc", "#0b3a80"]
-        case (.blue, true): hexes = ["#1c3c6b", "#2f68bd", "#5c9ff0", "#bcdcff"]
-        case (.green, false): hexes = ["#cdebd4", "#7ccc8e", "#2c9a4b", "#0c5424"]
-        case (.green, true): hexes = ["#174428", "#2a8545", "#56c473", "#b8f0c6"]
-        case (.purple, false): hexes = ["#e3d8f8", "#b193ec", "#7a4cd5", "#401c87"]
-        case (.purple, true): hexes = ["#34205e", "#6440bd", "#9e7cf1", "#ddcfff"]
-        case (.orange, false): hexes = ["#fde1c6", "#f6ab68", "#e1701c", "#8f3d08"]
-        case (.orange, true): hexes = ["#55290d", "#a35116", "#ec8b3b", "#ffd5ad"]
-        case (.pink, false): hexes = ["#f9d4e5", "#ee92bc", "#d6478a", "#851a4d"]
-        case (.pink, true): hexes = ["#541b37", "#a3386a", "#e873a9", "#ffc9e1"]
-        case (.teal, false): hexes = ["#cdeeee", "#79cccc", "#24999b", "#0a5456"]
-        case (.teal, true): hexes = ["#144445", "#24837f", "#4fc4c0", "#b5f0ee"]
+        switch self {
+        case .blue: hexes = ["#cfe1fb", "#7eb0f0", "#2f78dc", "#0b3a80"]
+        case .green: hexes = ["#cdebd4", "#7ccc8e", "#2c9a4b", "#0c5424"]
+        case .purple: hexes = ["#e3d8f8", "#b193ec", "#7a4cd5", "#401c87"]
+        case .orange: hexes = ["#fde1c6", "#f6ab68", "#e1701c", "#8f3d08"]
+        case .pink: hexes = ["#f9d4e5", "#ee92bc", "#d6478a", "#851a4d"]
+        case .teal: hexes = ["#cdeeee", "#79cccc", "#24999b", "#0a5456"]
         }
         return hexes.map(Color.init(hex:))
     }

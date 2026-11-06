@@ -148,7 +148,7 @@ struct StudyTimerPanel: View {
 
             HStack(spacing: 10) {
                 Button(action: timer.discard) { Image(systemName: "trash") }
-                    .help("Throw this session away")
+                    .tip("Throw this session away")
                     .disabled(!timer.hasStarted)
                 Button(action: timer.toggle) {
                     Label(timer.isRunning ? "Pause" : (timer.hasStarted ? "Resume" : "Start"),
@@ -158,7 +158,7 @@ struct StudyTimerPanel: View {
                 .buttonStyle(.borderedProminent)
                 .hoverGlow()
                 Button(action: timer.finish) { Label("Finish", systemImage: "checkmark") }
-                    .help("End the session and save it")
+                    .tip("End the session and save it")
                     .disabled(!timer.hasStarted)
             }
             .controlSize(.large)
@@ -173,7 +173,7 @@ struct StudyTimerPanel: View {
                         Button("Clear") { withAnimation { timer.clearToday() } }
                             .buttonStyle(.hoverable)
                             .font(.caption)
-                            .help("Delete all of today's sessions")
+                            .tip("Delete all of today's sessions")
                     }
                     ScrollView {
                         VStack(spacing: 2) {
@@ -208,7 +208,7 @@ private struct SessionRow: View {
             }
             .buttonStyle(.hoverable)
             .opacity(hovering ? 1 : 0.35)
-            .help("Delete this session")
+            .tip("Delete this session")
         }
         .font(.callout)
         .padding(.horizontal, 4)

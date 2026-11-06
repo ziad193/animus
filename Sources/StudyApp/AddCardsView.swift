@@ -54,7 +54,7 @@ struct AddCardsView: View {
                 Toggle(isOn: $showReference.animation()) {
                     Label("Slides & Notes", systemImage: "sidebar.right")
                 }
-                .help("Show a PDF or PowerPoint while you make cards")
+                .tip("Show a PDF or PowerPoint while you make cards")
             }
         }
         .task { await load() }
@@ -147,7 +147,7 @@ struct AddCardsView: View {
                     Label("Manage Card Types", systemImage: "slider.horizontal.below.rectangle")
                 }
                 .buttonStyle(.hoverable)
-                .help("Change a card type's fields, layout and styling, or make a new one")
+                .tip("Change a card type's fields, layout and styling, or make a new one")
             }
             // Wraps onto a second row when the Slides & Notes panel is open.
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 128, maximum: 150), spacing: 10, alignment: .leading)],
@@ -225,7 +225,7 @@ struct AddCardsView: View {
                                     Label("Make blank", systemImage: "rectangle.dashed")
                                 }
                                 .keyboardShortcut("c", modifiers: [.command, .shift])
-                                .help("Select words, then click to hide them (⇧⌘C)")
+                                .tip("Select words, then click to hide them (⇧⌘C)")
                             }
                         }
                         if index < handles.count {
@@ -275,7 +275,7 @@ struct AddCardsView: View {
             .controlSize(.large)
             .keyboardShortcut(.return, modifiers: .command)
             .disabled(!canAdd)
-            .help("Add (⌘Return)")
+            .tip("Add (⌘Return)")
         }
     }
 
@@ -514,7 +514,7 @@ private struct TypeTile: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("What is \(kind.title)?")
+            .tip("What is \(kind.title)?")
             .popover(isPresented: $showInfo, arrowEdge: .bottom) { TypeExplainer(kind: kind) }
             .padding(6)
         }

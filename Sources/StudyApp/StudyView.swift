@@ -131,6 +131,9 @@ struct StudyView: View {
                 await library.refresh()
             }
         }
+        // Keep Edit › Undo's name current ("Undo Answer Card"), and reload if it was used.
+        .onChange(of: session.card?.id) { Task { await library.refreshUndo() } }
+        .onChange(of: library.undoGeneration) { Task { await session.reloadAfterMenuUndo() } }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
@@ -138,14 +141,14 @@ struct StudyView: View {
                 } label: {
                     Label("Undo", systemImage: "arrow.uturn.backward")
                 }
-                .help("Undo last grade (⌘Z)")
+                .tip("Undo last grade (⌘Z)")
                 .buttonStyle(.automatic)
                 .disabled(!session.canUndo)
 
                 Toggle(isOn: $showReference.animation()) {
                     Label("Slides & Notes", systemImage: "sidebar.right")
                 }
-                .help("Show a PDF or PowerPoint beside your cards")
+                .tip("Show a PDF or PowerPoint beside your cards")
             }
         }
     }
@@ -184,7 +187,7 @@ struct StudyView: View {
                 Label("Done", systemImage: "chevron.left")
             }
             .buttonStyle(.hoverable)
-            .help("Stop studying (Esc)")
+            .tip("Stop studying (Esc)")
 
             Spacer()
             if library.preferences?.showRemainingDueCounts ?? true {
@@ -464,6 +467,12 @@ final class StudySession {
         }
     }
 
+    /// After Edit › Undo or Redo changed things behind the study screen.
+    func reloadAfterMenuUndo() async {
+        canUndo = false
+        await loadNext()
+    }
+
     private func loadNext(keepAnswer: Bool = false) async {
         guard let engine else { return }
         let previous = card?.id
@@ -646,7 +655,7 @@ struct GradeButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help(interval.isEmpty ? "\(rating.title) (\(rating.rawValue))" : "\(rating.title): see this again in \(interval) (\(rating.rawValue))")
+        .tip(interval.isEmpty ? "\(rating.title) (\(rating.rawValue))" : "\(rating.title): see this again in \(interval) (\(rating.rawValue))")
     }
 }
 

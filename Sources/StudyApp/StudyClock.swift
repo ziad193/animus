@@ -126,7 +126,7 @@ struct StudyClockBadge: View {
         }
         .font(.callout)
         .foregroundStyle(.secondary)
-        .help(clock.isPaused
+        .tip(clock.isPaused
               ? "The study timer pauses during breaks, when you switch apps, or after 3 minutes without a card"
               : "Time studied this session")
     }

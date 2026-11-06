@@ -116,7 +116,8 @@ final class BrowseModel {
         return parts.joined(separator: " ")
     }
 
-    func search(engine: Engine, decks: [Deck]) async {
+    /// `force`: reload the rows even if the same cards come back (e.g. after Edit › Undo).
+    func search(engine: Engine, decks: [Deck], force: Bool = false) async {
         generation += 1
         let mine = generation
         let sort = sortOrder.first
@@ -129,7 +130,7 @@ final class BrowseModel {
             guard mine == generation else { return }
             error = nil
             // Same results as before (e.g. the counts refreshed): keep the rows already shown.
-            if ids == cards.map(\.id) { return }
+            if !force, ids == cards.map(\.id) { return }
             cards = ids.map(CardRef.init)
             position = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
             rows = [:]

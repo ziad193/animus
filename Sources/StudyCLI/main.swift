@@ -5,7 +5,7 @@ import Foundation
 import StudyCore
 
 let args = CommandLine.arguments
-guard args.count == 2 || (args.count == 4 && args[2] == "study") || (args.count == 3 && ["stats", "add-test"].contains(args[2])) || (args.count == 4 && args[2] == "import") || (args.count >= 3 && args[2] == "browse") || (args.count == 3 && args[2] == "deckmenu") || (args.count == 3 && args[2] == "stocktypes") || (args.count == 3 && args[2] == "filtered") || (args.count == 3 && args[2] == "backuptest") || (args.count == 3 && args[2] == "actions") || (args.count == 3 && args[2] == "bulk") || (args.count == 3 && args[2] == "stats2") || (args.count == 3 && args[2] == "types") || (args.count == 4 && args[2] == "house") || (args.count == 4 && args[2] == "occlusion") || (args.count == 5 && args[2] == "synctest") || (args.count == 3 && args[1] == "synclogin") else {
+guard args.count == 2 || (args.count == 4 && args[2] == "study") || (args.count == 3 && ["stats", "add-test"].contains(args[2])) || (args.count == 4 && args[2] == "import") || (args.count >= 3 && args[2] == "browse") || (args.count == 3 && args[2] == "deckmenu") || (args.count == 3 && args[2] == "stocktypes") || (args.count == 3 && args[2] == "filtered") || (args.count == 3 && args[2] == "backuptest") || (args.count == 3 && args[2] == "actions") || (args.count == 3 && args[2] == "bulk") || (args.count == 3 && args[2] == "stats2") || (args.count == 3 && args[2] == "types") || (args.count == 3 && args[2] == "fsrsundo") || (args.count == 4 && args[2] == "house") || (args.count == 4 && args[2] == "occlusion") || (args.count == 5 && args[2] == "synctest") || (args.count == 3 && args[1] == "synclogin") else {
     print("usage: study-cli <collection.anki2> [study <deck id>]")
     exit(2)
 }
@@ -91,6 +91,25 @@ do {
         try await a.selectDeck(deck.id)
         print("A counts now \(try await a.nextCard().counts) (should be one fewer than before)")
         r = try await a.sync(auth); print("A sync again: \(r.result)")
+    } else if args[2] == "fsrsundo" {
+        // FSRS optimise on the biggest deck, then undo/redo labels around a change.
+        let decks = try await engine.decks()
+        guard let deck = decks.max(by: { $0.totalCards < $1.totalCards }) else { fatalError("no decks") }
+        let started = Date()
+        let result = try await engine.optimizeFSRS(deck: deck.id)
+        print("optimise \(deck.name): reviews=\(result.reviews) changed=\(result.changed) preset=\(result.presetName) in \(Int(Date().timeIntervalSince(started)))s")
+        let again = try await engine.optimizeFSRS(deck: deck.id)
+        print("optimise again: changed=\(again.changed)")
+        print("status before:", try await engine.undoStatus())
+        try await engine.renameDeck(deck.id, to: deck.name + " X")
+        let s1 = try await engine.undoStatus()
+        print("after rename:", s1)
+        try await engine.undo()
+        let s2 = try await engine.undoStatus()
+        print("after undo:", s2, "name:", (try await engine.decks()).first { $0.id == deck.id }?.name ?? "?")
+        try await engine.redo()
+        print("after redo:", try await engine.undoStatus(), "name:", (try await engine.decks()).first { $0.id == deck.id }?.name ?? "?")
+        try await engine.undo()
     } else if args[2] == "backuptest" {
         let colURL = URL(fileURLWithPath: args[1])
         let folder = colURL.deletingLastPathComponent().appendingPathComponent("backups")

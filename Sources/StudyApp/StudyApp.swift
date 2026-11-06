@@ -1,5 +1,6 @@
 import SwiftUI
 import StudyCore
+import WebKit
 
 /// Everything that belongs to one profile: its cards, timer, exams and sync.
 /// Switching profile swaps the whole session.
@@ -32,6 +33,9 @@ struct StudyAppMain: App {
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
         .commands {
+            CommandGroup(replacing: .undoRedo) {
+                UndoCommands(library: session.library)
+            }
             CommandGroup(replacing: .newItem) {
                 AddCardsCommand()
                 ImportCommand(library: session.library)
@@ -295,5 +299,36 @@ private struct WelcomeOption: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+}
+
+/// Edit › Undo and Redo. While you're typing in a box they undo the typing;
+/// otherwise they undo the last change to your cards (a grade, an edit, a delete…).
+private struct UndoCommands: View {
+    let library: Library
+
+    var body: some View {
+        Button(library.undoStatus.undo.map { "Undo \($0)" } ?? "Undo") {
+            if !Self.sendToTextBox("undo:") { Task { await library.undoFromMenu() } }
+        }
+        .keyboardShortcut("z", modifiers: .command)
+        Button(library.undoStatus.redo.map { "Redo \($0)" } ?? "Redo") {
+            if !Self.sendToTextBox("redo:") { Task { await library.redoFromMenu() } }
+        }
+        .keyboardShortcut("z", modifiers: [.command, .shift])
+    }
+
+    /// Hands Undo/Redo to the text box being typed in, if there is one.
+    @MainActor
+    private static func sendToTextBox(_ action: String) -> Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder as? NSView else { return false }
+        var view: NSView? = responder
+        var editing = responder is NSText
+        while !editing, let current = view {
+            if current is WKWebView { editing = true }
+            view = current.superview
+        }
+        guard editing else { return false }
+        return NSApp.sendAction(Selector((action)), to: nil, from: nil)
     }
 }

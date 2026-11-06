@@ -108,6 +108,7 @@ final class CardWebHost: NSObject, WKNavigationDelegate {
     private override init() {
         let config = WKWebViewConfiguration()
         config.setURLSchemeHandler(MediaSchemeHandler(folder: Library.mediaFolder), forURLScheme: "study-media")
+        config.setURLSchemeHandler(AppResourceHandler(), forURLScheme: "study-app")
         view = PassiveWebView(frame: NSRect(x: 0, y: 0, width: 600, height: 400), configuration: config)
         super.init()
         view.navigationDelegate = self
@@ -262,6 +263,36 @@ extension CardWebView {
         }
       }
 
+      // Maths formulas: \\\\( … \\\\) inline and \\\\[ … \\\\] on their own line, as in Anki.
+      // MathJax is big, so it's only loaded the first time a card needs it.
+      let mathjax = null;
+      function loadMathJax() {
+        if (mathjax) return mathjax;
+        window.MathJax = {
+          tex: {
+            displayMath: [["\\\\[", "\\\\]"]],
+            processEscapes: false, processEnvironments: false, processRefs: false,
+            packages: { "[+]": ["noerrors", "mathtools"], "[-]": ["textmacros"] },
+          },
+          svg: { fontCache: "local" },
+          startup: { typeset: false },
+        };
+        mathjax = new Promise(resolve => {
+          const s = document.createElement("script");
+          s.src = "study-app://mathjax/tex-svg-full.js";
+          s.onload = () => window.MathJax.startup.promise.then(resolve, resolve);
+          s.onerror = resolve;
+          document.head.appendChild(s);
+        });
+        return mathjax;
+      }
+      const hasMath = html => html.includes("\\\\(") || html.includes("\\\\[");
+      async function typeset(root) {
+        await loadMathJax();
+        if (!window.MathJax || !window.MathJax.typesetPromise) return;
+        try { await window.MathJax.typesetPromise([root]); } catch (e) {}
+      }
+
       async function show(p) {
         const mine = ++token;
         const qa = document.getElementById("qa");
@@ -284,6 +315,10 @@ extension CardWebView {
         }
         qa.innerHTML = p.html;
         runScripts(qa);
+        if (hasMath(p.html)) {
+          await Promise.race([typeset(qa), sleep(2000)]);
+          if (mine !== token) return;
+        }
         if (!sameCard) await imagesReady(qa, 300);
         if (mine !== token) return;
 
@@ -321,6 +356,27 @@ extension CardWebView {
 /// the study screen instead of scrolling the card.
 private final class PassiveWebView: WKWebView {
     override var acceptsFirstResponder: Bool { false }
+}
+
+/// Serves the app's own web files (MathJax) from inside Iterum.app, and nothing else.
+final class AppResourceHandler: NSObject, WKURLSchemeHandler {
+    private static let folder = Bundle.main.resourceURL?.appendingPathComponent("mathjax").standardizedFileURL
+
+    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        guard let url = task.request.url, url.host == "mathjax", let folder = Self.folder else {
+            return task.didFailWithError(URLError(.badURL))
+        }
+        let file = folder.appendingPathComponent(url.lastPathComponent).standardizedFileURL
+        guard file.path.hasPrefix(folder.path + "/"), let data = try? Data(contentsOf: file) else {
+            return task.didFailWithError(URLError(.fileDoesNotExist))
+        }
+        task.didReceive(URLResponse(url: url, mimeType: "text/javascript",
+                                    expectedContentLength: data.count, textEncodingName: "utf-8"))
+        task.didReceive(data)
+        task.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
 }
 
 /// Serves files from the media folder, and nothing outside it.

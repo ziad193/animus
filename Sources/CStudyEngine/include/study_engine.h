@@ -77,6 +77,9 @@ char *study_card_info(Engine *engine, const char *json);
 // Backups.
 char *study_backup(Engine *engine, const char *json);
 char *study_restore_backup(const char *json);
+char *study_fsrs_optimize(Engine *engine, const char *json);
+char *study_undo_status(Engine *engine, const char *json);
+char *study_redo(Engine *engine, const char *json);
 char *study_last_error(void);
 void study_free_string(char *s);
 
