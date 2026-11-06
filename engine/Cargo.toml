@@ -1,0 +1,24 @@
+[package]
+name = "study_engine"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "AGPL-3.0-or-later"
+description = "Small C bridge between the Mac app and Anki's Rust engine"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+anki = { path = "../vendor/anki/rslib", features = ["rustls"] }
+anki_proto = { path = "../vendor/anki/rslib/proto" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# For syncing: the same network and async libraries Anki's engine uses.
+reqwest = { version = "0.12.20", default-features = false }
+tokio = { version = "1.45", features = ["rt-multi-thread"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

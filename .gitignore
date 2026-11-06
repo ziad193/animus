@@ -1,0 +1,10 @@
+# Build output
+.build/
+build/
+engine/target/
+engine/target-server/
+
+# Downloaded tools (see README › Building)
+tools/
+
+.DS_Store
