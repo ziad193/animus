@@ -121,9 +121,13 @@ private struct ProfileScope: ViewModifier {
     let switchProfile: (String) -> Void
 
     func body(content: Content) -> some View {
-        ThemedContent(content: content)
-            // Animus Dev only: a red strip saying so, at the top of every window.
-            .safeAreaInset(edge: .top, spacing: 0) { DevBuildBanner() }
+        // Animus Dev only: a red strip saying so, at the top of every window.
+        // Stacked above the content (not an inset), so pages that reach the
+        // top, like studying with the tabs hidden, still sit below it.
+        VStack(spacing: 0) {
+            DevBuildBanner()
+            ThemedContent(content: content)
+        }
             .buttonStyle(.hoverBordered)
             .environment(session.library)
             .environment(session.pomodoro)

@@ -99,19 +99,10 @@ struct StudyView: View {
         .studyActionSheets(session: session, decks: decks)
         .overlay(alignment: .top) {
             if let toast = session.toast {
-                Text(toast)
-                    .font(.callout.weight(.medium))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 16).fill(.regularMaterial))
-                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator))
-                    // Hug the text, but wrap long messages (e.g. leeches).
-                    .frame(maxWidth: 560)
-                    .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-                    .padding(.top, 92)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                NoticeBubble(notice: toast)
+                    .id(toast.id)
+                    .padding(.top, 60)
+                    .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.92, anchor: .top)))
                     .allowsHitTesting(false)
             }
         }
@@ -155,45 +146,74 @@ struct StudyView: View {
 
     private var studyColumn: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 0) {
-                header
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
-                    .padding(.bottom, 4)
+            // The buttons sit straight on the picture: no strip behind them.
+            header
+                .bannerShadow()
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
 
-                if let card = session.card {
-                    CardActionBar(session: session, card: card)
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 6)
-                }
-            }
-            // Over a background: one frosted strip for the buttons, the card
-            // floating on the picture below it.
-            .frostedOnPicture(cornerRadius: 14)
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 6)
-
+            // The card uses the window, apart from a slim margin, so long cards
+            // don't need to scroll.
             content
-                .frame(maxWidth: 860, maxHeight: .infinity)
-                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 20)
 
             if session.card != nil {
                 controls
-                    .frostedOnPicture(cornerRadius: 14, padding: 8)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 12)
-                    .padding(.bottom, 18)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 14)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .screenBackground(plain: .background.secondary)
+        // The background picture, blurred so the card stays the focus.
+        .pageBackground(blur: 28, plain: .background.secondary)
+        // Answering makes the card flash in that answer's colour, then fade.
+        .onChange(of: session.answerPulse) { _, pulse in
+            guard let pulse else { return }
+            withAnimation(.easeOut(duration: 0.12)) { flash = pulse.rating }
+            Task {
+                // Holds through the short pause on the rated card, then fades on the next.
+                try? await Task.sleep(for: .milliseconds(Int(StudySession.ratedPause * 1000) + 250))
+                guard session.answerPulse == pulse else { return }
+                withAnimation(.easeOut(duration: 0.7)) { flash = nil }
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: session.previewRating)
+    }
+
+    /// The answer just given (bright), or the grade button under the pointer (soft).
+    @State private var flash: Rating?
+    @AppStorage(Pref.studyGlow) private var studyGlow = true
+    private var glowColor: Color? {
+        guard studyGlow else { return nil }
+        if let flash { return Palette.grade(flash) }
+        if session.showingAnswer, let preview = session.previewRating { return Palette.grade(preview) }
+        return nil
     }
 
     @AppStorage(Pref.studyShowDecks) private var studyShowDecks = false
     @AppStorage(Pref.studyShowTabs) private var studyShowTabs = true
 
     private var header: some View {
+        // The counts sit dead centre, whatever is on either side of them.
+        ZStack {
+            HStack {
+                leftButtons
+                Spacer()
+                // The card's tools, tucked into one menu in the corner.
+                if let card = session.card {
+                    CardMenuButton(session: session, card: card)
+                }
+            }
+            if library.preferences?.showRemainingDueCounts ?? true {
+                CountsBar(counts: session.counts)
+            }
+        }
+    }
+
+    private var leftButtons: some View {
         HStack {
             Button(action: onExit) {
                 Label("Done", systemImage: "chevron.left")
@@ -216,14 +236,6 @@ struct StudyView: View {
             }
             .buttonStyle(.hoverable)
             .tip(studyShowTabs ? "Hide the tabs along the top" : "Show the tabs along the top")
-
-            Spacer()
-            if library.preferences?.showRemainingDueCounts ?? true {
-                CountsBar(counts: session.counts)
-            }
-            Spacer()
-            // Nothing on the right on purpose: no clock or running tally while
-            // you study. The timer keeps counting quietly; Home shows the totals.
         }
     }
 
@@ -244,7 +256,10 @@ struct StudyView: View {
                                     side: session.showingAnswer ? .answer : .question,
                                     html: session.showingAnswer ? card.answer : card.question,
                                     css: card.css,
-                                    upcoming: card.upcoming,
+                                    // While the question shows, fetch this card's answer pictures
+                                    // too, so the answer appears straight away.
+                                    upcoming: session.showingAnswer ? card.upcoming
+                                        : card.answer + (card.upcoming ?? ""),
                                     dark: colorScheme == .dark,
                                     zoom: textSize.zoom,
                                     appStyle: cardStyle == .app,
@@ -254,12 +269,8 @@ struct StudyView: View {
                     }
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.background)
-                    .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
-            )
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(CardPane(glow: glowColor, strength: flash != nil ? 1 : 0.5))
             .padding(.vertical, 4)
         } else if session.finished {
             ContentUnavailableView {
@@ -289,7 +300,11 @@ struct StudyView: View {
                 ForEach(Rating.allCases) { rating in
                     GradeButton(rating: rating,
                                 interval: (library.preferences?.showIntervalsOnButtons ?? true)
-                                    ? card.intervals[safe: Int(rating.rawValue) - 1] ?? "" : "") {
+                                    ? card.intervals[safe: Int(rating.rawValue) - 1] ?? "" : "",
+                                onHover: { inside in
+                                    if inside { session.previewRating = rating }
+                                    else if session.previewRating == rating { session.previewRating = nil }
+                                }) {
                         Task { await session.grade(rating) }
                     }
                 }
@@ -318,6 +333,9 @@ struct StudyView: View {
 @MainActor
 @Observable
 final class StudySession {
+    /// How long the rated card stays on screen, glowing, before the next one.
+    static let ratedPause = 0.175
+
     private(set) var card: StudyCard?
     /// Set when the card is an image occlusion card we draw natively.
     private(set) var occlusion: OcclusionCard?
@@ -327,8 +345,12 @@ final class StudySession {
     private(set) var canUndo = false
     private(set) var error: String?
     private(set) var reviewed = 0
+    /// Bumped on every answer, so the card can glow in that answer's colour.
+    private(set) var answerPulse: AnswerPulse?
+    /// The grade button under the pointer, for a softer preview glow.
+    var previewRating: Rating?
     /// A short message after an action, e.g. "Buried until tomorrow".
-    private(set) var toast: String?
+    private(set) var toast: StudyNotice?
     /// Sheets the study screen shows.
     var editing: Int64?
     var info: Int64?
@@ -378,18 +400,25 @@ final class StudySession {
 
     func grade(_ rating: Rating) async {
         guard let engine, card != nil, showingAnswer, !busy else { return }
+        answerPulse = AnswerPulse(rating: rating, id: (answerPulse?.id ?? 0) + 1)
+        previewRating = nil
         busy = true
         defer { busy = false }
         let ms = UInt32(min(Date().timeIntervalSince(shownAt) * 1000, 60_000))
         let cardID = card?.id ?? 0
+        // A moment on the card you just rated, glowing in its colour, so it's
+        // clear which card the colour belongs to before the next one appears.
+        // (After the answer time is taken, so the pause isn't counted in it.)
+        try? await Task.sleep(for: .seconds(Self.ratedPause))
         // Forgetting a card too often makes it a "leech"; say so, so it can be fixed.
         let wasLeech = rating == .again ? ((try? await engine.leechState(cardID))?.leech ?? true) : true
         do {
             try await engine.answer(rating, milliseconds: ms)
             if !wasLeech, let state = try? await engine.leechState(cardID), state.leech {
-                show("You've forgotten this card \(state.lapses) times, so it's tagged “leech”"
-                     + (state.suspended ? " and paused. " : ". ")
-                     + "Try rewording it or splitting it up (find it in Browse).", seconds: 7)
+                show(StudyNotice(symbol: "exclamationmark.triangle.fill", color: .orange,
+                                 title: state.suspended ? "Tagged “leech” and paused" : "Tagged “leech”",
+                                 detail: "You've forgotten this card \(state.lapses) times. Try rewording it or splitting it up (find it in Browse)."),
+                     seconds: 7)
             }
             canUndo = true
             undoIsGrade = true
@@ -401,26 +430,39 @@ final class StudySession {
         await loadNext()
     }
 
+    /// Undo goes back one step at a time, as far as Anki's engine allows
+    /// (30 steps, the same as Anki), not just the last thing you did.
     func undo() async {
         guard let engine, canUndo, !busy else { return }
         busy = true
         defer { busy = false }
+        // What's being undone: an answer takes one off "cards studied".
+        let step = (try? await engine.undoStatus())?.undo
+        let wasAnswer = step == "Answer Card" || (step == nil && undoIsGrade)
         do {
             try await engine.undo()
         } catch {
-            canUndo = false
+            await refreshUndo()
             return
         }
-        canUndo = false
-        if undoIsGrade { withAnimation { reviewed = max(0, reviewed - 1) } }
-        show(undoIsGrade ? nil : "Undone")
+        if wasAnswer { withAnimation { reviewed = max(0, reviewed - 1) } }
+        show(StudyNotice(symbol: "arrow.uturn.backward", color: .accentColor,
+                         title: wasAnswer ? "Went back a card" : "Undone",
+                         detail: wasAnswer ? "Your last answer was taken back." : step.map { "Undid “\($0)”." }))
         await loadNext()
+        await refreshUndo()
+    }
+
+    /// Whether there's still something to undo, asked of the engine itself.
+    private func refreshUndo() async {
+        guard let engine else { canUndo = false; return }
+        canUndo = (try? await engine.undoStatus())?.undo != nil
     }
 
     // MARK: Card actions
 
     /// Runs a change to the current card, then shows the next one (or the same one, refreshed).
-    private func act(_ message: String, next: Bool = true, _ work: (Engine, Int64) async throws -> Void) async {
+    private func act(_ notice: StudyNotice, next: Bool = true, _ work: (Engine, Int64) async throws -> Void) async {
         guard let engine, let id = card?.id, !busy else { return }
         busy = true
         defer { busy = false }
@@ -428,9 +470,10 @@ final class StudySession {
             try await work(engine, id)
             canUndo = true
             undoIsGrade = false
-            show(message)
+            show(notice)
         } catch {
-            show(error.localizedDescription)
+            show(StudyNotice(symbol: "xmark.octagon.fill", color: .red, title: "That didn't work",
+                             detail: error.localizedDescription), seconds: 5)
             return
         }
         await loadNext(keepAnswer: !next)
@@ -438,14 +481,22 @@ final class StudySession {
 
     func setFlag(_ flag: Int) async {
         let new = card?.flag == flag ? 0 : flag
-        await act(new == 0 ? "Flag removed" : "Flagged \(FlagColor.all[new - 1].name.lowercased())", next: false) {
+        let notice = new == 0
+            ? StudyNotice(symbol: "flag.slash", color: .secondary, title: "Flag removed", detail: nil)
+            : StudyNotice(symbol: "flag.fill", color: FlagColor.all[new - 1].color,
+                          title: "Flagged \(FlagColor.all[new - 1].name.lowercased())",
+                          detail: "Find flagged cards in Browse › Flagged.")
+        await act(notice, next: false) {
             try await $0.setFlag([$1], new)
         }
     }
 
     func toggleMark() async {
         let marking = !(card?.marked ?? false)
-        await act(marking ? "Marked" : "Unmarked", next: false) { engine, id in
+        let notice = marking
+            ? StudyNotice(symbol: "star.fill", color: .yellow, title: "Marked", detail: "Tagged “marked” so you can come back to it.")
+            : StudyNotice(symbol: "star.slash", color: .secondary, title: "Unmarked", detail: nil)
+        await act(notice, next: false) { engine, id in
             let note = try await engine.note(forCard: id)
             var tags = note.tags.filter { $0.caseInsensitiveCompare("marked") != .orderedSame }
             if marking { tags.append("marked") }
@@ -454,23 +505,28 @@ final class StudySession {
     }
 
     func bury() async {
-        await act("Buried until tomorrow") { try await $0.bury([$1]) }
+        await act(StudyNotice(symbol: "moon.zzz.fill", color: .indigo, title: "Buried until tomorrow",
+                              detail: "It'll come back with tomorrow's cards.")) { try await $0.bury([$1]) }
     }
 
     func suspend() async {
-        await act("Suspended. Find it in Browse › Suspended to bring it back") { try await $0.setSuspended([$1], true) }
+        await act(StudyNotice(symbol: "pause.circle.fill", color: .orange, title: "Suspended",
+                              detail: "Find it in Browse › Suspended to bring it back.")) { try await $0.setSuspended([$1], true) }
     }
 
     func setDue(_ days: String) async {
-        await act("Rescheduled") { try await $0.setDueDate([$1], days: days) }
+        await act(StudyNotice(symbol: "calendar", color: .teal, title: "Rescheduled",
+                              detail: "It'll come back on the new date.")) { try await $0.setDueDate([$1], days: days) }
     }
 
     func forget() async {
-        await act("Reset to a new card") { try await $0.forget([$1]) }
+        await act(StudyNotice(symbol: "arrow.counterclockwise", color: .blue, title: "Reset to new",
+                              detail: "It'll be shown again as a new card.")) { try await $0.forget([$1]) }
     }
 
     func deleteNote() async {
-        await act("Note deleted") { try await $0.deleteNotes(ofCards: [$1]) }
+        await act(StudyNotice(symbol: "trash.fill", color: .red, title: "Note deleted",
+                              detail: "Changed your mind? Press ⌘Z to bring it back.")) { try await $0.deleteNotes(ofCards: [$1]) }
     }
 
     /// After editing: show the card again with the new text.
@@ -478,21 +534,21 @@ final class StudySession {
         await loadNext(keepAnswer: true)
     }
 
-    private func show(_ message: String?, seconds: Double = 2.5) {
+    private func show(_ notice: StudyNotice?, seconds: Double = 2.5) {
         toastTask?.cancel()
-        withAnimation { toast = message }
-        guard message != nil else { return }
+        withAnimation(.spring(duration: 0.35)) { toast = notice }
+        guard notice != nil else { return }
         toastTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
-            withAnimation { self?.toast = nil }
+            withAnimation(.easeIn(duration: 0.25)) { self?.toast = nil }
         }
     }
 
     /// After Edit › Undo or Redo changed things behind the study screen.
     func reloadAfterMenuUndo() async {
-        canUndo = false
         await loadNext()
+        await refreshUndo()
     }
 
     private func loadNext(keepAnswer: Bool = false) async {
@@ -650,6 +706,7 @@ struct CountsBar: View {
 struct GradeButton: View {
     let rating: Rating
     let interval: String
+    var onHover: (Bool) -> Void = { _ in }
     let action: () -> Void
     @State private var hovering = false
 
@@ -676,7 +733,7 @@ struct GradeButton: View {
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onHover { hovering = $0; onHover($0) }
         .tip(interval.isEmpty ? "\(rating.title) (\(rating.rawValue))" : "\(rating.title): see this again in \(interval) (\(rating.rawValue))")
     }
 }
@@ -698,4 +755,89 @@ struct KeyHint: View {
 
 extension Array {
     subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
+}
+
+/// The box behind the card: solid normally, and thick frosted glass (like a
+/// window pane) over a background picture, so the picture still shows through.
+private struct CardPane: View {
+    /// The colour to glow in: the answer you gave, or the one you're hovering.
+    var glow: Color?
+    /// 1 for the flash after answering, about half for the hover preview.
+    var strength: Double = 1
+    @Environment(\.onPicture) private var onPicture
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        shape
+            .fill(onPicture ? AnyShapeStyle(.thickMaterial) : AnyShapeStyle(.background))
+            .overlay(shape.strokeBorder(.white.opacity(onPicture ? 0.18 : 0)))
+            .shadow(color: .black.opacity(onPicture ? 0.28 : 0.08), radius: onPicture ? 24 : 12, y: 6)
+            // The glow sits behind the pane: a coloured halo spilling out
+            // around its edges, while the glass itself stays clear.
+            .background {
+                shape
+                    .fill(glow ?? .clear)
+                    .padding(-4)
+                    .blur(radius: 26)
+                    .opacity(glow == nil ? 0 : 0.9 * strength)
+                    // Cut out where the pane is, so the frosted glass (which is
+                    // see-through) isn't tinted: the colour only shows outside it.
+                    .mask {
+                        Rectangle()
+                            .padding(-120)
+                            .overlay(shape.blendMode(.destinationOut))
+                            .compositingGroup()
+                    }
+            }
+    }
+}
+
+/// One answer, so the study screen can flash in its colour.
+struct AnswerPulse: Equatable {
+    let rating: Rating
+    let id: Int
+}
+
+/// What a study action just did, shown briefly as a notification bubble.
+struct StudyNotice: Equatable {
+    let id = UUID()
+    let symbol: String
+    let color: Color
+    let title: String
+    let detail: String?
+}
+
+/// A notification-style bubble: a coloured icon, what happened, and a short
+/// line saying what it means. Slides down from the top, then goes by itself.
+private struct NoticeBubble: View {
+    let notice: StudyNotice
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: notice.symbol)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(notice.color.gradient))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(notice.title)
+                    .font(.callout.weight(.semibold))
+                if let detail = notice.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 16)
+        .padding(.vertical, 9)
+        .frame(maxWidth: 460, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: false)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.regularMaterial))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.12)))
+        .shadow(color: .black.opacity(0.22), radius: 16, y: 6)
+        .accessibilityElement(children: .combine)
+    }
 }

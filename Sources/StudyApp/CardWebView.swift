@@ -8,7 +8,8 @@ struct CardPayload: Equatable {
     var side: Side
     var html: String
     var css: String
-    /// The question of the card after this one, so its images load early.
+    /// Pictures to fetch early: this card's answer (while the question shows)
+    /// and the next card's question.
     var upcoming: String?
     var dark: Bool
     var zoom: Double
@@ -190,7 +191,7 @@ extension CardWebView {
       html, body, .card { background: transparent !important; }
       body { margin: 0; padding: 28px 36px 56px; -webkit-font-smoothing: antialiased; }
       .nightMode.card { color: var(--text); }
-      #qa { zoom: var(--zoom); transition: opacity 120ms ease; }
+      #qa { zoom: var(--zoom); transition: opacity 90ms ease; }
       #qa.hidden { opacity: 0; }
       img { max-width: 100%; height: auto; }
       a { color: var(--accent); }
@@ -212,7 +213,7 @@ extension CardWebView {
       .nightMode [style*="background-color: #fff"] { background-color: transparent !important; }
 
       /* The answer slides in under the question. */
-      .study-reveal { animation: study-reveal 260ms ease-out both; }
+      .study-reveal { animation: study-reveal 180ms ease-out both; }
       @keyframes study-reveal {
         from { opacity: 0; transform: translateY(6px); }
         to { opacity: 1; transform: none; }
@@ -310,7 +311,7 @@ extension CardWebView {
 
         if (!revealing && !sameCard) {
           qa.classList.add("hidden");
-          await sleep(90);
+          await sleep(60);
           if (mine !== token) return;
         }
         qa.innerHTML = p.html;
@@ -319,15 +320,22 @@ extension CardWebView {
           await Promise.race([typeset(qa), sleep(2000)]);
           if (mine !== token) return;
         }
-        if (!sameCard) await imagesReady(qa, 300);
+        // A new card waits a moment for its pictures so it doesn't jump; the
+        // answer never waits (its pictures were fetched while the question showed).
+        if (!sameCard && !revealing) await imagesReady(qa, 150);
         if (mine !== token) return;
 
         if (revealing) {
+          // Slide the whole answer in as one piece. (Animating each element on
+          // its own left plain text showing at once and bold words fading in late.)
           const marker = document.getElementById("answer");
-          let el = marker ? marker.nextElementSibling : null;
-          if (marker) marker.classList.add("study-reveal");
-          while (el) { el.classList.add("study-reveal"); el = el.nextElementSibling; }
-          if (marker) marker.scrollIntoView({ behavior: "smooth", block: "start" });
+          if (marker) {
+            const wrap = document.createElement("div");
+            wrap.className = "study-reveal";
+            while (marker.nextSibling) wrap.appendChild(marker.nextSibling);
+            marker.after(wrap);
+            marker.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
         } else if (!sameCard) {
           window.scrollTo(0, 0);
         }

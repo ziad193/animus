@@ -267,13 +267,14 @@ struct OcclusionCardView: View {
         ZStack {
             ForEach(Array(others.enumerated()), id: \.offset) { _, shape in
                 path(shape, in: size)
-                    .fill(Color(white: 0.55).opacity(0.92))
+                    // Fully solid: a see-through box would give the hidden label away.
+                    .fill(Color(white: 0.55))
                     .overlay(path(shape, in: size).stroke(Color(white: 0.35), lineWidth: 1))
             }
             ForEach(Array(card.targets.enumerated()), id: \.offset) { _, shape in
                 ZStack {
                     path(shape, in: size)
-                        .fill(accent.opacity(showingAnswer ? 0 : 0.95))
+                        .fill(accent.opacity(showingAnswer ? 0 : 1))
                     path(shape, in: size)
                         .stroke(accent, lineWidth: showingAnswer ? 3 : 1.5)
                         .shadow(color: accent.opacity(showingAnswer ? 0.8 : (pulse ? 0.7 : 0.15)), radius: 6)

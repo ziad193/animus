@@ -21,84 +21,150 @@ struct FlagColor: Identifiable {
     static func of(_ flag: Int) -> FlagColor? { all.first { $0.number == flag } }
 }
 
-/// The row of small buttons above the card: edit, flag, mark, bury, suspend, info, more.
-struct CardActionBar: View {
+/// The card's tools in one place: a "Card" button in the study screen's top
+/// corner that opens a tidy panel (edit, flag, mark, bury, suspend, info, and
+/// the rarer ones at the bottom). Every tool keeps its keyboard key.
+struct CardMenuButton: View {
     let session: StudySession
     let card: StudyCard
+    @State private var open = false
 
     var body: some View {
-        HStack(spacing: 4) {
-            Spacer()
-            barButton("Edit", "pencil", "Edit this card (E)") { session.editing = card.id }
+        Button { open.toggle() } label: {
+            Label("Card", systemImage: "ellipsis.circle")
+                // A flagged or marked card shows it here, so it isn't lost.
+                .overlay(alignment: .topLeading) { statusDot.offset(x: 10, y: -3) }
+        }
+        .buttonStyle(.hoverable)
+        .tip("Edit, flag, bury and more for this card")
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            CardMenu(session: session, card: card) { open = false }
+        }
+    }
 
-            Menu {
-                ForEach(FlagColor.all) { flag in
-                    Button {
-                        Task { await session.setFlag(flag.number) }
-                    } label: {
-                        Label(card.flag == flag.number ? "\(flag.name) ✓" : flag.name, systemImage: "flag.fill")
-                    }
-                    .keyboardShortcut(KeyEquivalent(Character("\(flag.number)")), modifiers: .command)
-                }
-                if card.flag != 0 {
-                    Divider()
-                    Button("Remove Flag") { Task { await session.setFlag(card.flag) } }
-                }
-            } label: {
-                chip(FlagColor.of(card.flag)?.name ?? "Flag", card.flag == 0 ? "flag" : "flag.fill",
-                     tint: FlagColor.of(card.flag)?.color)
-            }
-            .menuStyle(.button)
-            .buttonStyle(.hoverable)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .tip("Flag this card with a colour (⌘1–7). Find flagged cards in Browse.")
+    @ViewBuilder private var statusDot: some View {
+        if let flag = FlagColor.of(card.flag) {
+            Circle().fill(flag.color).frame(width: 7, height: 7)
+        } else if card.marked {
+            Circle().fill(Color.yellow).frame(width: 7, height: 7)
+        }
+    }
+}
 
-            barButton(card.marked ? "Marked" : "Mark", card.marked ? "star.fill" : "star",
-                      "Mark this note to come back to it (*)", tint: card.marked ? .yellow : nil) {
+private struct CardMenu: View {
+    let session: StudySession
+    let card: StudyCard
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("This card")
+                .font(.headline)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+
+            row("Edit", "pencil", .blue, key: "E") { session.editing = card.id }
+            row(card.marked ? "Unmark" : "Mark", card.marked ? "star.fill" : "star", .yellow, key: "*") {
                 Task { await session.toggleMark() }
             }
-            barButton("Bury", "moon.zzz", "Skip it until tomorrow (-)") { Task { await session.bury() } }
-            barButton("Suspend", "pause.circle", "Stop showing it until you unsuspend it in Browse (@)") {
-                Task { await session.suspend() }
-            }
-            barButton("Info", "info.circle", "This card's history and stats (I)") { session.info = card.id }
+            row("Bury until tomorrow", "moon.zzz", .indigo, key: "−") { Task { await session.bury() } }
+            row("Suspend", "pause.circle", .orange, key: "@") { Task { await session.suspend() } }
+            row("Card info", "info.circle", .teal, key: "I") { session.info = card.id }
 
-            Menu {
-                Button { session.settingDue = card.id } label: { Label("Set Due Date…", systemImage: "calendar") }
-                Button { Task { await session.forget() } } label: {
-                    Label("Reset to New", systemImage: "arrow.counterclockwise")
+            Divider().padding(.vertical, 6)
+
+            // Flags: one tap on a colour; tap it again to take the flag off.
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Flag").font(.subheadline.weight(.medium))
+                    Spacer()
+                    KeyCap("⌘1–7")
                 }
-                Divider()
-                Button(role: .destructive) { session.confirmingDelete = true } label: {
-                    Label("Delete Note…", systemImage: "trash")
+                HStack(spacing: 8) {
+                    ForEach(FlagColor.all) { flag in
+                        let on = card.flag == flag.number
+                        Button {
+                            Task { await session.setFlag(flag.number) }
+                            close()
+                        } label: {
+                            Circle()
+                                .fill(flag.color)
+                                .frame(width: 22, height: 22)
+                                .overlay(Image(systemName: "checkmark").font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white).opacity(on ? 1 : 0))
+                                .overlay(Circle().strokeBorder(.white.opacity(on ? 0.9 : 0), lineWidth: 2).padding(-3))
+                        }
+                        .buttonStyle(.plain)
+                        .hoverLift(scale: 1.12)
+                        .tip(on ? "Remove the \(flag.name.lowercased()) flag" : "\(flag.name) flag")
+                    }
                 }
-            } label: {
-                chip("More", "ellipsis.circle")
             }
-            .menuStyle(.button)
-            .buttonStyle(.hoverable)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .tip("Set due date, reset to new, or delete")
-            Spacer()
+            .padding(.horizontal, 10)
+
+            Divider().padding(.vertical, 6)
+
+            row("Set due date…", "calendar", .secondary, key: nil) { session.settingDue = card.id }
+            row("Reset to new", "arrow.counterclockwise", .secondary, key: nil) { Task { await session.forget() } }
+            row("Delete note…", "trash", .red, key: "⌘⌫", destructive: true) { session.confirmingDelete = true }
         }
-        .font(.callout)
+        .padding(10)
+        .frame(width: 290)
     }
 
-    private func barButton(_ title: String, _ symbol: String, _ help: String, tint: Color? = nil,
-                           action: @escaping () -> Void) -> some View {
-        Button(action: action) { chip(title, symbol, tint: tint) }
-            .buttonStyle(.hoverable)
-            .tip(help)
+    private func row(_ title: String, _ symbol: String, _ color: Color, key: String?,
+                     destructive: Bool = false, action: @escaping () -> Void) -> some View {
+        MenuRow(title: title, symbol: symbol, color: color, key: key, destructive: destructive) {
+            close()
+            action()
+        }
     }
+}
 
-    private func chip(_ title: String, _ symbol: String, tint: Color? = nil) -> some View {
-        Label(title, systemImage: symbol)
-            .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
+/// One line of the card menu: a coloured icon, the action, and its key.
+private struct MenuRow: View {
+    let title: String
+    let symbol: String
+    let color: Color
+    let key: String?
+    var destructive = false
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(color)
+                    .frame(width: 26, height: 26)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(color.opacity(0.15)))
+                Text(title)
+                    .foregroundStyle(destructive ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
+                Spacer()
+                if let key { KeyCap(key) }
+            }
             .padding(.horizontal, 6)
-            .padding(.vertical, 3)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(hovering ? 0.08 : 0)))
             .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}
+
+/// A small keyboard-key label, e.g. "E" or "⌘⌫".
+private struct KeyCap: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text)
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(RoundedRectangle(cornerRadius: 5).strokeBorder(.secondary.opacity(0.4)))
     }
 }
 

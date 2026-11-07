@@ -18,6 +18,8 @@ enum Pref {
     static let studyShowDecks = "study.showDecks"
     /// While studying: whether the tabs (Home, Add Cards…) show along the top.
     static let studyShowTabs = "study.showTabs"
+    /// While studying: the card glows in the colour of the answer you give.
+    static let studyGlow = "study.glow"
 }
 
 /// Whether cards use the app's clean look or the deck's own fonts and colours.
@@ -252,6 +254,7 @@ struct SettingsView: View {
 private struct GeneralPreferences: View {
     @AppStorage(Pref.setupDone) private var setupDone = false
     @AppStorage(Pref.slidesHint) private var slidesHint = true
+    @AppStorage(Pref.studyGlow) private var studyGlow = true
     @AppStorage(UpdateChecker.automaticKey, store: AppDefaults.base) private var autoUpdates = true
 
     var body: some View {
@@ -269,6 +272,14 @@ private struct GeneralPreferences: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Toggle(isOn: $studyGlow) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Glow when you answer")
+                    Text("The card glows red, orange, green or blue for Again, Hard, Good or Easy, and softly while you hover over a button.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
             Toggle(isOn: $slidesHint) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Slides & Notes hint in Add Cards")
