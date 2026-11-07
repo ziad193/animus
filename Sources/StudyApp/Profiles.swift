@@ -5,7 +5,13 @@ import Observation
 /// remembers (theme, exams, study time, sync sign-in…) goes here, so each
 /// profile is completely separate.
 enum AppDefaults {
-    nonisolated(unsafe) static var current: UserDefaults = .standard
+    nonisolated(unsafe) static var current: UserDefaults = base
+
+    /// The app's main settings store. Test collections get a separate one, so
+    /// a test run can never change the real app's settings or profiles.
+    static let base: UserDefaults = Library.isTestCollection
+        ? (UserDefaults(suiteName: "com.ziad.studyapp.test") ?? .standard)
+        : .standard
 }
 
 /// A person (or subject) with their own cards, settings and sync account,
@@ -25,7 +31,7 @@ struct Profile: Codable, Identifiable, Hashable {
     }
 
     var defaults: UserDefaults {
-        isOriginal ? .standard : (UserDefaults(suiteName: "com.ziad.studyapp.profile.\(id)") ?? .standard)
+        isOriginal ? AppDefaults.base : (UserDefaults(suiteName: "com.ziad.studyapp.profile.\(id)") ?? .standard)
     }
 
     /// e.g. "Z" for the avatar circle.
@@ -44,7 +50,7 @@ final class ProfileStore {
     private static let activeKey = "profiles.active"
 
     init() {
-        let d = UserDefaults.standard
+        let d = AppDefaults.base
         var list: [Profile]
         if let data = d.data(forKey: Self.listKey), let saved = try? JSONDecoder().decode([Profile].self, from: data), !saved.isEmpty {
             list = saved
@@ -110,8 +116,8 @@ final class ProfileStore {
         Self.currentFolder = active.folder
         Self.currentID = activeID
         if let data = try? JSONEncoder().encode(profiles) {
-            UserDefaults.standard.set(data, forKey: Self.listKey)
+            AppDefaults.base.set(data, forKey: Self.listKey)
         }
-        UserDefaults.standard.set(activeID, forKey: Self.activeKey)
+        AppDefaults.base.set(activeID, forKey: Self.activeKey)
     }
 }

@@ -23,6 +23,8 @@ struct SetupView: View {
     @State private var triedCard = false
 
     private let ankiProfiles = Library.ankiProfiles()
+    /// Shared decks found in Downloads (looked for when you reach the cards step).
+    @State private var downloadedDecks: [Library.RecentDeckFile] = []
 
     enum Step: Int, CaseIterable {
         case welcome, aboutYou
@@ -36,6 +38,7 @@ struct SetupView: View {
         case keep
         case profile(URL)
         case deckFile
+        case downloaded(URL)
         case ankiWeb
         case fresh
     }
@@ -288,7 +291,16 @@ struct SetupView: View {
                     source = .profile(profile)
                 }
             }
-            SourceRow(symbol: "square.and.arrow.down", title: "Open a deck file (.apkg)",
+            ForEach(downloadedDecks, id: \.self) { file in
+                SourceRow(symbol: "arrow.down.doc",
+                          title: "Add “\(file.name)” from Downloads",
+                          subtitle: file.detail,
+                          selected: source == .downloaded(file.url)) {
+                    source = .downloaded(file.url)
+                }
+            }
+            SourceRow(symbol: "square.and.arrow.down",
+                      title: downloadedDecks.isEmpty ? "Open a deck file (.apkg)" : "Open a different deck file…",
                       subtitle: "A shared deck from a friend, a course or the internet", selected: source == .deckFile) {
                 source = .deckFile
             }
@@ -299,6 +311,10 @@ struct SetupView: View {
             if isWorking {
                 ProgressView("Copying your cards…").padding(.top, 6)
             }
+        }
+        .task {
+            // Off the main thread: the first time, macOS asks before Iterum can look in Downloads.
+            downloadedDecks = await Task.detached(priority: .userInitiated) { Library.recentDeckFiles() }.value
         }
     }
 
@@ -337,6 +353,8 @@ struct SetupView: View {
             case .deckFile:
                 guard let message = await library.chooseAndImport() else { return }
                 library.notice = message
+            case .downloaded(let url):
+                library.notice = await library.importPackage(url)
             }
             go(1)
         case .done:

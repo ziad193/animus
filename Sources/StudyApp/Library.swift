@@ -110,6 +110,44 @@ final class Library {
         }
     }
 
+    /// Shared deck files (.apkg) in Downloads, newest first, for setup to offer.
+    /// Only file names and dates are read. macOS asks once before Iterum can look.
+    nonisolated static func recentDeckFiles(limit: Int = 2) -> [RecentDeckFile] {
+        let fm = FileManager.default
+        var folder = fm.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        // Test collections look in a stand-in folder, never the real Downloads.
+        if isTestCollection {
+            guard let stand = ProcessInfo.processInfo.environment["ITERUM_TEST_DOWNLOADS"] else { return [] }
+            folder = URL(fileURLWithPath: stand, isDirectory: true)
+        }
+        let keys: [URLResourceKey] = [.addedToDirectoryDateKey, .contentModificationDateKey, .fileSizeKey]
+        let items = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
+                                                 options: [.skipsHiddenFiles])) ?? []
+        return items
+            .filter { $0.pathExtension.lowercased() == "apkg" }
+            .map { url in
+                let values = try? url.resourceValues(forKeys: Set(keys))
+                return RecentDeckFile(url: url,
+                                      date: values?.addedToDirectoryDate ?? values?.contentModificationDate ?? .distantPast,
+                                      bytes: values?.fileSize ?? 0)
+            }
+            .sorted { $0.date > $1.date }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    struct RecentDeckFile: Hashable, Sendable {
+        let url: URL
+        let date: Date
+        let bytes: Int
+        var name: String { url.deletingPathExtension().lastPathComponent }
+        /// e.g. "Downloaded 3 days ago · 12 MB"
+        var detail: String {
+            "Downloaded " + date.formatted(.relative(presentation: .named))
+                + " · " + ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        }
+    }
+
     /// Imports a shared deck file (.apkg) into the open collection and
     /// returns a short summary for the student.
     func importPackage(_ url: URL) async -> String {
