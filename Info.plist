@@ -12,6 +12,7 @@
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>NSHighResolutionCapable</key><true/>
+    <key>AnimusUpdateRepository</key><string>ziad193/animus</string>
     <key>NSHumanReadableCopyright</key><string>© 2026 Ziad. Free software under the GNU AGPL v3. Built on Anki.</string>
     <key>NSDownloadsFolderUsageDescription</key>
 	<string>Animus looks in Downloads for shared deck files (.apkg) so you can add one with a click. Only file names are read.</string>
