@@ -56,7 +56,7 @@ struct DecksView: View {
         VStack(spacing: 0) {
             // Home has its own big buttons, so the tabs only show once you've left it.
             // Coming back Home, they stay for a few seconds, then slide away.
-            if showTabs {
+            if showTabs && !(studying && !studyShowTabs) {
                 VStack(spacing: 0) {
                     TabStrip(selection: sidebar, decks: decks, select: select)
                     Divider()
@@ -65,6 +65,7 @@ struct DecksView: View {
             }
             pages
         }
+        .animation(.easeInOut(duration: 0.25), value: studyShowTabs)
         .onChange(of: isHome) { _, home in
             lingerTask?.cancel()
             guard home else {
@@ -245,8 +246,22 @@ struct DecksView: View {
     }
 
     private var wantsSidebar: Bool {
+        // Studying: tucked away unless you ask for it, so the card has the room.
+        if studying { return studyShowDecks }
         if case .deck = sidebar { return true }
         return !path.isEmpty
+    }
+
+    @AppStorage(Pref.studyShowDecks) private var studyShowDecks = false
+    @AppStorage(Pref.studyShowTabs) private var studyShowTabs = true
+
+    /// True while a card is being studied (either way of getting there).
+    private var studying: Bool {
+        if case .study = path.last { return true }
+        if path.isEmpty, case .deck(let id) = sidebar, let deck = Deck.find(id, in: decks) {
+            return deck.children.isEmpty
+        }
+        return false
     }
 
     /// Switches tab (always back to that tab's first page).
@@ -307,6 +322,7 @@ private struct TodayPage: View {
 
     @State private var stats: Stats?
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
     @Environment(SyncManager.self) private var sync
     @Environment(ProfileStore.self) private var profiles
 
@@ -375,6 +391,12 @@ private struct TodayPage: View {
                     }
                     .tip("Appearance, when your study day starts, the timer and more (⌘,)")
                     Button {
+                        openWindow(id: HelpWindow.id)
+                    } label: {
+                        Label("Help", systemImage: "questionmark.circle")
+                    }
+                    .tip("A short guide to studying, adding cards, syncing and shortcuts (⌘?)")
+                    Button {
                         Task { await sync.syncNow() }
                     } label: {
                         Label(sync.isSignedIn ? sync.summary : "Sync with AnkiWeb", systemImage: "arrow.triangle.2.circlepath")
@@ -390,6 +412,7 @@ private struct TodayPage: View {
             .frame(maxWidth: 1280, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .screenBackground()
         .task(id: decks.map(\.dueToday)) {
             stats = try? await library.engine?.stats(days: Heatmap.historyDays)
         }

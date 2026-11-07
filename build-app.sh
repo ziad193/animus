@@ -34,6 +34,10 @@ cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp -R Resources/mathjax "$APP/Contents/Resources/mathjax"
 # Shown in About Animus.
 cp Resources/Credits.html "$APP/Contents/Resources/Credits.html"
+# Background previews only: the full pictures download when picked (see Backgrounds.swift).
+# Public-domain paintings (The Met, CC0) and a NASA photo. See Credits.html.
+mkdir -p "$APP/Contents/Resources/backgrounds"
+cp Resources/backgrounds/*-thumb.jpg "$APP/Contents/Resources/backgrounds/"
 codesign --force --sign - "$APP" >/dev/null 2>&1 || true
 
 echo "Built $APP ($(du -sh "$APP" | cut -f1), $(lipo -archs "$APP/Contents/MacOS/StudyApp"))"

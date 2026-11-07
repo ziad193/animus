@@ -178,8 +178,11 @@ struct StudyView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background.secondary)
+        .screenBackground(plain: .background.secondary, inset: 16)
     }
+
+    @AppStorage(Pref.studyShowDecks) private var studyShowDecks = false
+    @AppStorage(Pref.studyShowTabs) private var studyShowTabs = true
 
     private var header: some View {
         HStack {
@@ -189,19 +192,29 @@ struct StudyView: View {
             .buttonStyle(.hoverable)
             .tip("Stop studying (Esc)")
 
+            Button {
+                studyShowDecks.toggle()
+            } label: {
+                Label(studyShowDecks ? "Hide Decks" : "Show Decks", systemImage: "sidebar.left")
+            }
+            .buttonStyle(.hoverable)
+            .tip(studyShowDecks ? "Hide the deck list" : "Show your decks down the side")
+
+            Button {
+                studyShowTabs.toggle()
+            } label: {
+                Label(studyShowTabs ? "Hide Tabs" : "Show Tabs", systemImage: "menubar.rectangle")
+            }
+            .buttonStyle(.hoverable)
+            .tip(studyShowTabs ? "Hide the tabs along the top" : "Show the tabs along the top")
+
             Spacer()
             if library.preferences?.showRemainingDueCounts ?? true {
                 CountsBar(counts: session.counts)
             }
             Spacer()
-
-            HStack(spacing: 14) {
-                Text(session.reviewed == 1 ? "1 card studied" : "\(session.reviewed) cards studied")
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-                StudyClockBadge()
-            }
+            // Nothing on the right on purpose: no clock or running tally while
+            // you study. The timer keeps counting quietly; Home shows the totals.
         }
     }
 

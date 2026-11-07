@@ -14,6 +14,10 @@ enum Pref {
     static let accent = "accent"
     static let cardTextSize = "cardTextSize"
     static let cardStyle = "cardStyle"
+    /// While studying: whether the deck list shows down the side (off by default).
+    static let studyShowDecks = "study.showDecks"
+    /// While studying: whether the tabs (Home, Add Cards…) show along the top.
+    static let studyShowTabs = "study.showTabs"
 }
 
 /// Whether cards use the app's clean look or the deck's own fonts and colours.
@@ -246,8 +250,11 @@ private struct GeneralPreferences: View {
     @AppStorage(UpdateChecker.automaticKey, store: AppDefaults.base) private var autoUpdates = true
 
     var body: some View {
+        // Scrolls, so the window still fits a laptop screen.
+        ScrollView {
         VStack(alignment: .leading, spacing: 16) {
             AppearancePicker()
+            BackgroundPicker()
             HeatmapColorPicker()
             Divider()
             Toggle(isOn: $autoUpdates) {
@@ -276,6 +283,8 @@ private struct GeneralPreferences: View {
             }
         }
         .padding(24)
+        }
+        .frame(height: 640)
     }
 }
 

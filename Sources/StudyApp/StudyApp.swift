@@ -41,6 +41,8 @@ struct StudyAppMain: App {
                 UpdateCommand()
             }
             CommandGroup(replacing: .help) {
+                HelpGuideCommand()
+                Divider()
                 HelpCommands(library: session.library, profiles: profiles)
             }
             CommandGroup(replacing: .newItem) {
@@ -64,6 +66,14 @@ struct StudyAppMain: App {
                 .profileScope(session, profiles: profiles, switchProfile: switchProfile)
         }
         .defaultSize(width: 1100, height: 700)
+
+        // Help › Animus Help (⌘?), or the Help button on Home.
+        Window("Animus Help", id: HelpWindow.id) {
+            HelpGuideView()
+                .frame(minWidth: 720, minHeight: 480)
+                .profileScope(session, profiles: profiles, switchProfile: switchProfile)
+        }
+        .defaultSize(width: 860, height: 600)
 
         Settings {
             SettingsView()

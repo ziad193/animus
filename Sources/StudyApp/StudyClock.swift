@@ -113,21 +113,3 @@ final class StudyClock {
     }
 }
 
-/// The running clock on the study screen.
-struct StudyClockBadge: View {
-    @Environment(StudyClock.self) private var clock
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: clock.isPaused ? "pause.circle" : "stopwatch")
-            Text(clock.isPaused ? "Paused" : StudyClock.clock(clock.sessionSeconds))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-        }
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .tip(clock.isPaused
-              ? "The study timer pauses during breaks, when you switch apps, or after 3 minutes without a card"
-              : "Time studied this session")
-    }
-}
