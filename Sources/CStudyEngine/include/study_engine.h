@@ -53,6 +53,15 @@ char *study_add_occlusion(Engine *engine, const char *json);
 // Browse power tools.
 char *study_bulk(Engine *engine, const char *json);
 char *study_find_dupes(Engine *engine, const char *json);
+char *study_typed_answer(Engine *engine, const char *json);
+char *study_empty_cards(Engine *engine);
+char *study_remove_cards(Engine *engine, const char *json);
+char *study_rename_tag(Engine *engine, const char *json);
+char *study_delete_tag(Engine *engine, const char *json);
+char *study_clear_unused_tags(Engine *engine);
+char *study_saved_searches(Engine *engine);
+char *study_set_saved_searches(Engine *engine, const char *json);
+char *study_deck_description(Engine *engine, const char *json);
 char *study_all_tags(Engine *engine, const char *json);
 // Study more today.
 char *study_more_info(Engine *engine, const char *json);

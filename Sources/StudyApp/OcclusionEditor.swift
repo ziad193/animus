@@ -47,6 +47,8 @@ struct OcclusionEditor: View {
     @State private var error: String?
     @State private var working = false
     @State private var dropTargeted = false
+    @State private var plusStore = PlusStore.shared
+    @State private var findingLabels = false
     /// Shapes Animus can't edit (e.g. freehand polygons drawn in Anki); kept as they are.
     @State private var keptShapes: [String] = []
 
@@ -116,6 +118,10 @@ struct OcclusionEditor: View {
             // For developers: preload a picture when running on a test collection.
             if Library.isTestCollection, let path = ProcessInfo.processInfo.environment["ITERUM_TEST_IMAGE"] {
                 load(URL(fileURLWithPath: path))
+            } else if Library.isTestCollection, let folder = ProcessInfo.processInfo.environment["ITERUM_DATA_FOLDER"] {
+                // Animus Dev: a sample diagram, if one's been put in TestFiles.
+                let sample = URL(fileURLWithPath: folder).appendingPathComponent("TestFiles/diagram.png")
+                if FileManager.default.fileExists(atPath: sample.path) { load(sample) }
             }
         }
         .dropDestination(for: URL.self) { urls, _ in
@@ -189,6 +195,16 @@ struct OcclusionEditor: View {
                 Label("Undo Box", systemImage: "arrow.uturn.backward")
             }
             .disabled(boxes.isEmpty)
+            // Animus+ (Animus Dev only until it's ready): box every label for you.
+            if plusStore.showsPreviews && plusStore.showsPrompts {
+                PlusFeatureButton(feature: .autoOcclusion) {
+                    Task { await findLabels() }
+                } label: {
+                    if findingLabels { ProgressView().controlSize(.small) }
+                    else { Label("Find Labels", systemImage: "text.viewfinder") }
+                }
+                .disabled(findingLabels)
+            }
             Spacer()
             Text(cardCount == 0 ? "Drag over a label to hide it" : "\(cardCount) card\(cardCount == 1 ? "" : "s")")
                 .font(.callout)
@@ -354,6 +370,29 @@ struct OcclusionEditor: View {
     }
 
     /// Keeps card numbers 1, 2, 3… in the order the boxes were drawn.
+    /// Animus+: finds the text labels on the picture and boxes each one as its
+    /// own card (skipping any already covered). The stand-in uses the Mac's
+    /// own text recognition, so this already works without an AI.
+    private func findLabels() async {
+        guard let image, let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+        findingLabels = true
+        defer { findingLabels = false }
+        do {
+            let found = try await PlusAI.current.labels(in: cg)
+            var next = (boxes.map(\.card).max() ?? 0) + 1
+            var added = 0
+            for label in found where !boxes.contains(where: { $0.frame.intersects(label.frame) }) {
+                boxes.append(Box(kind: .rect, frame: label.frame, card: next))
+                next += 1
+                added += 1
+            }
+            renumber()
+            error = added == 0 ? "No new labels found on this picture." : nil
+        } catch {
+            self.error = "Couldn't read the labels: \(error.localizedDescription)"
+        }
+    }
+
     private func renumber() {
         var map: [Int: Int] = [:]
         for index in boxes.indices {

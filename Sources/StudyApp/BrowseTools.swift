@@ -3,7 +3,7 @@ import StudyCore
 
 /// The Browse tools that need a sheet.
 enum BrowseSheet: String, Identifiable {
-    case addTags, removeTags, setDue, reposition, findReplace, changeType, duplicates
+    case addTags, removeTags, setDue, reposition, findReplace, changeType, duplicates, manageTags
     var id: String { rawValue }
 }
 
@@ -39,6 +39,8 @@ struct BrowseToolSheet: View {
             ChangeTypeSheet(cards: cards, done: done)
         case .duplicates:
             DuplicatesSheet(scope: scope, show: show, done: done)
+        case .manageTags:
+            TagManagerSheet(show: show, done: done)
         }
     }
 

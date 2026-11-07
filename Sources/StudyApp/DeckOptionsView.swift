@@ -160,12 +160,82 @@ struct DeckOptionsView: View {
                 number("Maximum interval (days)", "The longest gap between reviews, however well you know a card.", s.maximumReviewInterval, 1...36500)
             }
 
+            group("Easy days", "sun.max") {
+                Text("Pick lighter days, e.g. weekends or placement days. Animus schedules fewer reviews then and moves them to the days around them.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                easyDaysGrid(s)
+            }
+
+            group("Auto advance", "forward.end") {
+                Text("Moves on by itself, for studying hands-free. Set to 0 to leave it off. Pause it from the card menu while studying.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                seconds("Show the answer after", "Seconds on the question before the answer appears.", s.autoQuestionSeconds)
+                seconds("Then move on after", "Seconds on the answer before the next card.", s.autoAnswerSeconds)
+                if s.wrappedValue.autoAnswerSeconds > 0 {
+                    row("When it moves on", "What happens to the card you didn't rate.") {
+                        Picker("Answer action", selection: s.autoAnswerAction) {
+                            Text("Rate it Good").tag(2)
+                            Text("Rate it Hard").tag(3)
+                            Text("Rate it Again").tag(1)
+                            Text("Bury it").tag(0)
+                            Text("Just remind me").tag(4)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+            }
+
             group("Burying", "moon.zzz") {
                 Text("Cards made from the same note (like the two sides of a Both Ways card) can give each other away. Burying holds the others back until tomorrow.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 toggle("Bury related new cards", nil, s.buryNew)
                 toggle("Bury related review cards", nil, s.buryReviews)
                 toggle("Bury related learning cards from earlier days", nil, s.buryInterdayLearning)
+            }
+        }
+    }
+
+    private static let weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    /// Anki keeps one value per weekday, Monday first: 1 normal, 0.5 reduced, 0 minimum.
+    private func easyDaysGrid(_ s: Binding<DeckSettings>) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+            ForEach(0..<7, id: \.self) { day in
+                GridRow {
+                    Text(Self.weekdays[day]).frame(width: 40, alignment: .leading)
+                    Picker(Self.weekdays[day], selection: Binding(
+                        get: {
+                            let value = s.wrappedValue.easyDays.indices.contains(day) ? s.wrappedValue.easyDays[day] : 1
+                            return value >= 0.75 ? 1.0 : (value >= 0.25 ? 0.5 : 0.0)
+                        },
+                        set: { value in
+                            var days = s.wrappedValue.easyDays
+                            while days.count < 7 { days.append(1) }
+                            days[day] = value
+                            s.wrappedValue.easyDays = days
+                        })) {
+                        Text("Normal").tag(1.0)
+                        Text("Reduced").tag(0.5)
+                        Text("Minimum").tag(0.0)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 280)
+                }
+            }
+        }
+    }
+
+    private func seconds(_ title: String, _ help: String, _ value: Binding<Double>) -> some View {
+        row(title, help) {
+            HStack(spacing: 4) {
+                TextField("", value: value, format: .number.precision(.fractionLength(0...1)))
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 60)
+                Stepper("", value: value, in: 0...600, step: 1).labelsHidden()
+                Text("sec").foregroundStyle(.secondary)
             }
         }
     }

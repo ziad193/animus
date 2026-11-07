@@ -152,7 +152,11 @@ struct UpdateAlerts: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .task { await checker.checkIfDue() }
+            .task {
+                await checker.checkIfDue()
+                // Animus+: re-check a saved key about once a day (does nothing until there's a server).
+                await PlusStore.shared.refreshIfDue()
+            }
             .alert("Animus \(checker.available?.version ?? "") is available",
                    isPresented: Binding(get: { checker.available != nil }, set: { if !$0 { checker.available = nil } })) {
                 Button("Download") {

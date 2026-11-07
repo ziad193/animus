@@ -13,6 +13,7 @@ struct StudyView: View {
     let onExit: () -> Void
 
     @State private var session = StudySession()
+    @FocusState private var typingFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(Pref.cardTextSize) private var textSize = CardTextSize.normal
     @AppStorage(Pref.cardStyle) private var cardStyle = CardStyle.app
@@ -167,11 +168,29 @@ struct StudyView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottomTrailing) {
+            if let missed {
+                MissedCardPanel(context: missed, askMore: { askingAboutMissed = missed }) {
+                    withAnimation { self.missed = nil }
+                }
+                .padding(20)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .sheet(item: Binding(get: { askingAboutMissed.map(MissedRef.init) }, set: { askingAboutMissed = $0?.context })) { ref in
+            AskAnimusSheet(context: ref.context)
+        }
         // The background picture, blurred so the card stays the focus.
         .pageBackground(blur: 28, plain: .background.secondary)
         // Answering makes the card flash in that answer's colour, then fade.
         .onChange(of: session.answerPulse) { _, pulse in
             guard let pulse else { return }
+            // Animus+: after Again, explain the card just missed.
+            let plus = PlusStore.shared
+            if pulse.rating == .again, plus.showsPreviews, plus.isUnlocked(.explainMistakes), plus.explainMistakes,
+               let card = session.card {
+                withAnimation(.spring(duration: 0.35)) { missed = AskContext(card: card, deck: deck.shortName) }
+            }
             withAnimation(.easeOut(duration: 0.12)) { flash = pulse.rating }
             Task {
                 // Holds through the short pause on the rated card, then fades on the next.
@@ -185,6 +204,9 @@ struct StudyView: View {
 
     /// The answer just given (bright), or the grade button under the pointer (soft).
     @State private var flash: Rating?
+    /// Animus+: the card you just missed, explained in a corner panel.
+    @State private var missed: AskContext?
+    @State private var askingAboutMissed: AskContext?
     @AppStorage(Pref.studyGlow) private var studyGlow = true
     private var glowColor: Color? {
         guard studyGlow else { return nil }
@@ -254,7 +276,7 @@ struct StudyView: View {
                     CardWebView(payload: CardPayload(
                                     cardID: card.id,
                                     side: session.showingAnswer ? .answer : .question,
-                                    html: session.showingAnswer ? card.answer : card.question,
+                                    html: session.showingAnswer ? (session.typedAnswerHTML ?? card.answer) : card.question,
                                     css: card.css,
                                     // While the question shows, fetch this card's answer pictures
                                     // too, so the answer appears straight away.
@@ -311,19 +333,32 @@ struct StudyView: View {
             }
             .frame(maxWidth: 620)
         } else {
-            Button {
-                session.revealAnswer()
-            } label: {
-                HStack {
-                    Text("Show Answer").font(.headline)
-                    KeyHint("Space")
+            VStack(spacing: 10) {
+                // Type-the-answer cards: type first, then Return to check it.
+                if session.card?.typeAnswer == true {
+                    TextField("Type the answer, then press Return", text: Binding(get: { session.typed }, set: { session.typed = $0 }))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.title3)
+                        .frame(maxWidth: 520)
+                        .focused($typingFocused)
+                        .onSubmit { session.revealAnswer() }
+                        .onAppear { typingFocused = true }
+                        .onChange(of: session.card?.id) { typingFocused = true }
                 }
-                .frame(width: 280)
-                .padding(.vertical, 6)
+                Button {
+                    session.revealAnswer()
+                } label: {
+                    HStack {
+                        Text("Show Answer").font(.headline)
+                        KeyHint(session.card?.typeAnswer == true ? "Return" : "Space")
+                    }
+                    .frame(width: 280)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .hoverGlow()
+                .controlSize(.large)
             }
-            .buttonStyle(.borderedProminent)
-            .hoverGlow()
-            .controlSize(.large)
         }
     }
 }
@@ -353,6 +388,10 @@ final class StudySession {
     private(set) var toast: StudyNotice?
     /// Sheets the study screen shows.
     var editing: Int64?
+    /// Ask Animus (Animus+) is open about the current card.
+    var askingAnimus = false
+    /// Fix my card (Animus+) is open for this card.
+    var fixingCard: Int64?
     var info: Int64?
     var settingDue: Int64?
     var confirmingDelete = false
@@ -393,10 +432,107 @@ final class StudySession {
     }
 
     func revealAnswer() {
-        guard card != nil, !showingAnswer else { return }
+        guard let card, !showingAnswer else { return }
+        // Type-the-answer cards: compare what was typed (Anki's own comparison).
+        if card.typeAnswer, let engine, !typed.trimmingCharacters(in: .whitespaces).isEmpty {
+            let text = typed
+            Task {
+                if let compared = try? await engine.typedAnswer(card: card.id, typed: text) {
+                    typedAnswerHTML = compared.html
+                }
+                showingAnswer = true
+                autoplay(side: "a")
+                scheduleAutoAdvance()
+            }
+            return
+        }
         showingAnswer = true
         autoplay(side: "a")
+        scheduleAutoAdvance()
     }
+
+    // MARK: Auto advance
+
+    /// Paused from the card menu or ⇧A (as in Anki); stays off for this session.
+    private(set) var autoAdvancePaused = false
+    private var autoTask: Task<Void, Never>?
+
+    /// The deck has auto advance set up (shows the pause button).
+    var hasAutoAdvance: Bool {
+        guard let auto = card?.autoAdvance else { return false }
+        return auto.questionSeconds > 0 || auto.answerSeconds > 0
+    }
+
+    func toggleAutoAdvance() {
+        autoAdvancePaused.toggle()
+        show(StudyNotice(symbol: autoAdvancePaused ? "pause.fill" : "forward.end.fill", color: .accentColor,
+                         title: autoAdvancePaused ? "Auto advance paused" : "Auto advance on",
+                         detail: autoAdvancePaused ? "Press ⇧A to turn it back on." : nil))
+        if autoAdvancePaused { autoTask?.cancel() } else { scheduleAutoAdvance() }
+    }
+
+    /// Counts down on the side showing now, then shows the answer or moves on,
+    /// as set in the deck's options. Waits while a sheet is open or on a break.
+    private func scheduleAutoAdvance() {
+        autoTask?.cancel()
+        guard let card, let auto = card.autoAdvance, !autoAdvancePaused else { return }
+        let onAnswer = showingAnswer
+        let seconds = onAnswer ? auto.answerSeconds : auto.questionSeconds
+        guard seconds > 0 else { return }
+        let id = card.id
+        autoTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            // Hold off while something else is open, then go once it's closed.
+            while let self, !Task.isCancelled, self.isInterrupted {
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            guard let self, !Task.isCancelled, self.card?.id == id, self.showingAnswer == onAnswer, !self.autoAdvancePaused else { return }
+            if onAnswer {
+                switch auto.answerAction {
+                case 0: await self.bury()
+                case 1: await self.grade(.again)
+                case 3: await self.grade(.hard)
+                case 4: self.remind()
+                default: await self.grade(.good)
+                }
+            } else if auto.questionAction == 1 {
+                self.remind()
+            } else {
+                self.revealAnswer()
+            }
+        }
+    }
+
+    private var isInterrupted: Bool {
+        onBreak || busy || editing != nil || info != nil || settingDue != nil || confirmingDelete
+            || askingAnimus || fixingCard != nil || voice.isRecording
+    }
+
+    private func remind() {
+        show(StudyNotice(symbol: "clock", color: .orange, title: "Time's up",
+                         detail: showingAnswer ? "Rate the card to move on." : "Press Space to show the answer."))
+    }
+
+    /// What you typed on a type-the-answer card.
+    var typed = ""
+    /// Your own voice, recorded to compare with the card (⇧V, V).
+    let voice = OwnVoice()
+
+    func toggleVoiceRecording() async {
+        let message = await voice.toggle()
+        show(StudyNotice(symbol: voice.isRecording ? "mic.fill" : "waveform", color: voice.isRecording ? .red : .blue,
+                         title: voice.isRecording ? "Recording your voice" : "Your recording", detail: message),
+             seconds: voice.isRecording ? 30 : 3)
+    }
+
+    func replayVoice() {
+        if !voice.play() {
+            show(StudyNotice(symbol: "mic.slash", color: .secondary, title: "Nothing recorded yet",
+                             detail: "Press ⇧V to record your voice for this card."))
+        }
+    }
+    /// The answer with your typing compared, once revealed.
+    private(set) var typedAnswerHTML: String?
 
     func grade(_ rating: Rating) async {
         guard let engine, card != nil, showingAnswer, !busy else { return }
@@ -567,9 +703,13 @@ final class StudySession {
             finished = state.card == nil
             let same = keepAnswer && state.card?.id == previous
             if !same {
+                typed = ""
+                typedAnswerHTML = nil
+                voice.reset()
                 showingAnswer = false
                 shownAt = Date()
                 autoplay(side: "q")
+                scheduleAutoAdvance()
             }
             error = nil
         } catch {
@@ -616,6 +756,7 @@ final class StudySession {
     func removeKeys() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
+        autoTask?.cancel()
         player.removeAllItems()
     }
 
@@ -632,7 +773,8 @@ final class StudySession {
             onExit?()
             return true
         }
-        guard card != nil, !onBreak, editing == nil, info == nil, settingDue == nil, !confirmingDelete else { return false }
+        guard card != nil, !onBreak, editing == nil, info == nil, settingDue == nil, !confirmingDelete, !askingAnimus,
+              fixingCard == nil else { return false }
         // ⌘1–7 flag the card (⌘0 removes it), as in Anki.
         if mods == .command, let digit = event.charactersIgnoringModifiers.flatMap(Int.init), (0...7).contains(digit) {
             Task { await setFlag(digit == 0 ? (card?.flag ?? 0) : digit) }
@@ -646,7 +788,12 @@ final class StudySession {
         if plain {
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "e": editing = card?.id; return true
+            case "v":
+                // ⇧V records your own voice, V plays it back (as in Anki).
+                if mods.contains(.shift) { Task { await toggleVoiceRecording() } } else { replayVoice() }
+                return true
             case "i": info = card?.id; return true
+            case "a" where mods.contains(.shift) && hasAutoAdvance: toggleAutoAdvance(); return true
             case "*": Task { await toggleMark() }; return true
             case "-": Task { await bury() }; return true
             case "@": Task { await suspend() }; return true
@@ -840,4 +987,10 @@ private struct NoticeBubble: View {
         .shadow(color: .black.opacity(0.22), radius: 16, y: 6)
         .accessibilityElement(children: .combine)
     }
+}
+
+/// Lets the missed card open Ask Animus as a sheet.
+private struct MissedRef: Identifiable {
+    let context: AskContext
+    var id: String { context.question }
 }

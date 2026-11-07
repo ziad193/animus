@@ -72,6 +72,9 @@ struct AddCardsView: View {
         .task(id: [String(noteType?.id ?? 0)] + fields.prefix(1)) { await checkDuplicate() }
     }
 
+    @State private var plusStore = PlusStore.shared
+    @State private var plusWorkflow: PlusFeature?
+
     // MARK: Layout
 
     private var editor: some View {
@@ -79,6 +82,34 @@ struct AddCardsView: View {
             VStack(alignment: .leading, spacing: 22) {
                 if !showReference && showSlidesHint {
                     slidesTip
+                }
+                // Animus+ (Animus Dev only until it's ready): make cards from a lecture.
+                if plusStore.showsPreviews && plusStore.showsPrompts {
+                    HStack(spacing: 10) {
+                        PlusFeatureButton(feature: .lectureToCards) {
+                            plusWorkflow = .lectureToCards
+                        } label: {
+                            Label("Make cards from a lecture", systemImage: PlusFeature.lectureToCards.symbol)
+                        }
+                        PlusFeatureButton(feature: .clozeFromNotes) {
+                            plusWorkflow = .clozeFromNotes
+                        } label: {
+                            Label("Fill-in-the-blank from notes", systemImage: PlusFeature.clozeFromNotes.symbol)
+                        }
+                        PlusFeatureButton(feature: .pictureToCards) {
+                            plusWorkflow = .pictureToCards
+                        } label: {
+                            Label("Cards from a photo", systemImage: PlusFeature.pictureToCards.symbol)
+                        }
+                    }
+                    .controlSize(.large)
+                    .sheet(item: $plusWorkflow) { feature in
+                        switch feature {
+                        case .clozeFromNotes: ClozeNotesSheet(deckID: deckID)
+                        case .pictureToCards: PictureCardsSheet(deckID: deckID)
+                        default: LectureCardsSheet(deckID: deckID)
+                        }
+                    }
                 }
                 typePicker
                 deckPicker

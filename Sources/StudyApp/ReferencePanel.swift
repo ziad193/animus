@@ -31,7 +31,7 @@ struct ReferencePanel: View {
             Divider()
             Group {
                 if let current {
-                    DocumentView(url: current)
+                    DocumentView(url: current, deckID: deckID)
                         .id(current)
                 } else {
                     emptyState
@@ -228,6 +228,17 @@ enum DocumentKind {
 /// Picks the right reader for the file and shows its controls.
 private struct DocumentView: View {
     let url: URL
+    /// The deck cards made from these slides go into.
+    let deckID: Int64
+    @State private var plus = PlusStore.shared
+    /// Animus+: dragging out an area of the slide to make cards from.
+    @State private var capturing = false
+    @State private var captured: CapturedPicture?
+
+    struct CapturedPicture: Identifiable {
+        let id = UUID()
+        let image: NSImage
+    }
 
     enum Mode: String { case pages, text }
     @State private var mode: Mode = .pages
@@ -246,6 +257,14 @@ private struct DocumentView: View {
             Divider()
             if kind == .pdf {
                 PDFReader(url: url, controller: pdf)
+                    .overlay {
+                        if capturing {
+                            CaptureOverlay(cancel: { capturing = false }) { rect in
+                                capturing = false
+                                if let image = pdf.capture(rect) { captured = CapturedPicture(image: image) }
+                            }
+                        }
+                    }
             } else if showingText {
                 TextReader(url: url, controller: text)
             } else {
@@ -259,6 +278,27 @@ private struct DocumentView: View {
         }
         .onChange(of: query) { runSearch() }
         .onChange(of: mode) { query = "" }
+        .sheet(item: $captured) { SlideCaptureSheet(picture: $0.image, deckID: deckID) }
+    }
+
+    /// Animus+ (Animus Dev only until the AI is connected): make cards from the
+    /// slide you're on, or from an area you drag out.
+    @ViewBuilder private var captureButtons: some View {
+        if kind == .pdf, plus.showsPreviews, plus.showsPrompts {
+            Divider().frame(height: 16)
+            PlusFeatureButton(feature: .lectureToCards) {
+                if let image = pdf.currentPagePicture() { captured = CapturedPicture(image: image) }
+            } label: {
+                Image(systemName: "rectangle.portrait.on.rectangle.portrait.angled")
+            }
+            .tip("Cards from this slide (Animus+)")
+            PlusFeatureButton(feature: .lectureToCards) {
+                capturing.toggle()
+            } label: {
+                Image(systemName: capturing ? "xmark.square" : "viewfinder")
+            }
+            .tip(capturing ? "Stop capturing" : "Capture an area of the slide to make cards from (Animus+)")
+        }
     }
 
     private var controls: some View {
@@ -305,6 +345,7 @@ private struct DocumentView: View {
                 Button { zoom(1.2) } label: { Image(systemName: "plus.magnifyingglass") }
                     .tip("Zoom in")
             }
+            captureButtons
             if kind != .pdf {
                 Button {
                     NSWorkspace.shared.open(url)
@@ -419,6 +460,26 @@ final class PDFController {
 
     func fit() {
         view?.autoScales = true
+    }
+
+    /// The slide you're on, as a picture (at double size, so small text reads).
+    func currentPagePicture() -> NSImage? {
+        guard let page = view?.currentPage else { return nil }
+        let bounds = page.bounds(for: .mediaBox)
+        return page.thumbnail(of: CGSize(width: bounds.width * 2, height: bounds.height * 2), for: .mediaBox)
+    }
+
+    /// Exactly what's on screen inside `rect` (in the reader's own coordinates,
+    /// measured from the top left), as a picture.
+    func capture(_ rect: CGRect) -> NSImage? {
+        guard let view, rect.width > 4, rect.height > 4 else { return nil }
+        let area = CGRect(x: rect.minX, y: view.isFlipped ? rect.minY : view.bounds.height - rect.maxY,
+                          width: rect.width, height: rect.height)
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: area) else { return nil }
+        view.cacheDisplay(in: area, to: rep)
+        let image = NSImage(size: area.size)
+        image.addRepresentation(rep)
+        return image
     }
 
     /// Highlights every match and jumps to the first.
@@ -616,5 +677,65 @@ private struct TextReader: NSViewRepresentable {
             }
         }
         return copy
+    }
+}
+
+// MARK: - Capturing part of a slide (Animus+)
+
+/// Dims the slide; drag a box over the part you want cards from.
+private struct CaptureOverlay: View {
+    let cancel: () -> Void
+    let done: (CGRect) -> Void
+    @State private var start: CGPoint?
+    @State private var current: CGPoint?
+
+    private var box: CGRect? {
+        guard let start, let current else { return nil }
+        return CGRect(x: min(start.x, current.x), y: min(start.y, current.y),
+                      width: abs(current.x - start.x), height: abs(current.y - start.y))
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.black.opacity(0.35)
+                .overlay {
+                    if let box {
+                        Rectangle()
+                            .frame(width: box.width, height: box.height)
+                            .position(x: box.midX, y: box.midY)
+                            .blendMode(.destinationOut)
+                    }
+                }
+                .compositingGroup()
+            if let box {
+                Rectangle()
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                    .frame(width: box.width, height: box.height)
+                    .position(x: box.midX, y: box.midY)
+            }
+            HStack(spacing: 10) {
+                Image(systemName: "viewfinder")
+                Text("Drag over the part of the slide to make cards from")
+                Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
+            }
+            .font(.callout.weight(.medium))
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(Capsule().fill(.regularMaterial))
+            .padding(.top, 12)
+        }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 3, coordinateSpace: .local)
+                .onChanged { value in
+                    if start == nil { start = value.startLocation }
+                    current = value.location
+                }
+                .onEnded { _ in
+                    if let box { done(box) }
+                    start = nil
+                    current = nil
+                }
+        )
+        .onHover { inside in inside ? NSCursor.crosshair.push() : NSCursor.pop() }
     }
 }

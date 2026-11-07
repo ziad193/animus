@@ -13,7 +13,14 @@ struct SetupView: View {
     @AppStorage(Pref.accent) private var accent = AccentChoice.blue
     @AppStorage(Pref.setupDone) private var setupDone = false
 
-    @State private var step: Step = .welcome
+    @State private var step: Step = SetupView.testStartStep ?? .welcome
+
+    /// Test copies only: ITERUM_TEST_SETUP_STEP=onDeviceAI opens Setup on that
+    /// page, for checking pages without clicking through.
+    private static var testStartStep: Step? {
+        guard Library.isTestCollection, let name = ProcessInfo.processInfo.environment["ITERUM_TEST_SETUP_STEP"] else { return nil }
+        return Step.allCases.first { "\($0)" == name }
+    }
     @State private var source: CardSource = .keep
     @State private var forward = true
     @State private var showingSignIn = false
@@ -26,10 +33,14 @@ struct SetupView: View {
     /// Shared decks found in Downloads (looked for when you reach the cards step).
     @State private var downloadedDecks: [Library.RecentDeckFile] = []
 
+    /// Checked once, before the pages are laid out: any Apple Silicon Mac
+    /// (on an older macOS it gets a reminder to update). Not Intel Macs.
+    private let onDeviceAICapable = OnDeviceAI.status != .notAppleSilicon
+
     enum Step: Int, CaseIterable {
         case welcome, aboutYou
         case memory, tryCard, numbers, decks, cardTypes
-        case cards, look, keys, done
+        case cards, look, keys, onDeviceAI, plus, done
 
         var isLesson: Bool { [.memory, .tryCard, .numbers, .decks, .cardTypes].contains(self) }
     }
@@ -45,7 +56,13 @@ struct SetupView: View {
 
     /// The pages this person will see (the tour only if they asked for it).
     private var steps: [Step] {
-        Step.allCases.filter { !$0.isLesson || wantsTour == true }
+        // The on-device AI page only appears on a Mac that can run it.
+        // The AI and Animus+ pages stay in Animus Dev until those features ship.
+        Step.allCases.filter {
+            ($0 != .onDeviceAI || (onDeviceAICapable && PlusStore.shared.showsPreviews))
+                && ($0 != .plus || PlusStore.shared.showsPreviews)
+                && (!$0.isLesson || wantsTour == true)
+        }
     }
 
     private var hasCards: Bool {
@@ -60,11 +77,8 @@ struct SetupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ProgressView(value: Double(steps.firstIndex(of: step) ?? 0), total: Double(max(1, steps.count - 1)))
-                .progressViewStyle(.linear)
-                .tint(accent.color)
-                .padding(.horizontal, 48)
-                .padding(.top, 28)
+            // (No progress bar: the pages speak for themselves.)
+            Color.clear.frame(height: 28)
 
             HStack(alignment: .center, spacing: step.isLesson ? 40 : 56) {
                 if !step.isLesson {
@@ -119,9 +133,9 @@ struct SetupView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canContinue || isWorking)
             }
+            // Back and Next sit straight on the page, with no bar behind them.
             .padding(.horizontal, 48)
             .padding(.vertical, 24)
-            .background(.bar)
         }
         .background(Backdrop())
         .sheet(isPresented: $showingSignIn, onDismiss: {
@@ -193,6 +207,23 @@ struct SetupView: View {
         case .keys:
             return ("keyboard.fill", "Study without the mouse",
                     "A few keys are all you need. Buttons work too.")
+        case .onDeviceAI:
+            switch OnDeviceAI.status {
+            case .capable:
+                return ("cpu", "Your Mac can run AI on its own",
+                        "Animus will use Apple Intelligence for some smart features, free, private and offline. Coming soon.")
+            case .needsNewerMacOS:
+                return ("cpu", "Your Mac can run AI on its own",
+                        "Your Mac has the right chip for Apple Intelligence. Update macOS to use it in Animus: free, private and offline.")
+            case .notAppleSilicon:
+                return ("cpu", "AI on your Mac",
+                        "Apple Intelligence needs a Mac with Apple Silicon (M1 or later), so it isn't available on this one.")
+            }
+        case .plus:
+            return ("sparkles", "Coming soon: Animus+",
+                    onDeviceAICapable
+                    ? "Apple Intelligence covers the everyday jobs. Animus+ adds a stronger AI for the big ones."
+                    : "Everything you've seen is free, and stays free. Animus+ will add tools that make cards for you.")
         case .done:
             return ("checkmark.seal.fill", first.isEmpty ? "You're all set" : "You're all set, \(first)",
                     "Your cards are on Home. Study a little every day and the app plans the rest.")
@@ -231,6 +262,30 @@ struct SetupView: View {
                 KeyRow(keys: ["⌘", "Z"], text: "Undo the last grade")
                 KeyRow(keys: ["Esc"], text: "Stop studying")
                 KeyRow(keys: ["Return"], text: "Start studying the selected deck")
+            }
+        case .onDeviceAI:
+            OnDeviceAIPage()
+        case .plus:
+            VStack(alignment: .leading, spacing: 12) {
+                if onDeviceAICapable {
+                    // Follows on from the Apple Intelligence page: only what's extra.
+                    Text("On top of Apple Intelligence, Animus+ adds:").font(.headline)
+                    ForEach(OnDeviceAI.plusOnly) { feature in
+                        Explainer(symbol: feature.symbol, color: .purple, title: feature.title, text: feature.detail)
+                    }
+                    Text("It also runs everything on stronger AI: better cards, and it reads pictures as well as their text.")
+                        .font(.callout).foregroundStyle(.secondary)
+                } else {
+                    ForEach(PlusFeature.allCases.filter(\.isHeadline)) { feature in
+                        Explainer(symbol: feature.symbol, color: .purple, title: feature.title, text: feature.detail)
+                    }
+                    Text("…and more: fix messy cards, cards from photos, automatic picture labels and a weekly report.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                Label("Not interested? Turn off Animus+ suggestions any time in Settings › Animus.",
+                      systemImage: "slider.horizontal.3")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         case .done:
             VStack(alignment: .leading, spacing: 12) {
@@ -482,6 +537,63 @@ private struct KeyRow: View {
             }
             .frame(width: 150, alignment: .leading)
             Text(text)
+        }
+    }
+}
+
+/// Setup: whether this Mac can run Apple Intelligence, and what that will mean.
+private struct OnDeviceAIPage: View {
+    private let status = OnDeviceAI.status
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                check(OnDeviceAI.isAppleSilicon, "Apple Silicon chip",
+                      OnDeviceAI.isAppleSilicon ? "M1 or later" : "This Mac has an Intel chip")
+                check(OnDeviceAI.isMacOS26, "macOS 26 or later", "You have \(OnDeviceAI.macOSName)")
+            }
+            Text(status == .capable ? "Free with Apple Intelligence, once it's ready:" : "Free with Apple Intelligence after updating:")
+                .font(.headline)
+            ForEach(OnDeviceAI.freeFeatures) { feature in
+                Explainer(symbol: feature.symbol, color: .teal, title: feature.title, text: feature.detail)
+            }
+            switch status {
+            case .capable:
+                HStack(spacing: 10) {
+                    Text("Make sure Apple Intelligence is turned on.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("Open Settings…") { OnDeviceAI.openSettings() }
+                }
+                Text("Nothing leaves your Mac, and it works offline.")
+                    .font(.caption).foregroundStyle(.secondary)
+            case .needsNewerMacOS:
+                HStack(spacing: 10) {
+                    Text("Update to macOS 26 or later to use these. Everything else in Animus works as it is.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Software Update…") { OnDeviceAI.openSoftwareUpdate() }
+                }
+            case .notAppleSilicon:
+                Text("No problem: everything in Animus works without it, and Animus+ works on any Mac.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Text(OnDeviceAI.freeForEveryone).font(.caption).foregroundStyle(.secondary)
+            Label("Want more? Animus+ adds whole lectures, Ask Animus and more. See the next page.",
+                  systemImage: "arrow.right.circle")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.purple)
+        }
+    }
+
+    private func check(_ ok: Bool, _ title: String, _ detail: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(ok ? .green : .orange)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title).font(.callout.weight(.medium))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }

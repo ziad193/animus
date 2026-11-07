@@ -59,12 +59,60 @@ public struct StudyCard: Decodable, Identifiable, Equatable {
     public let flag: Int
     /// The note is tagged "marked".
     public let marked: Bool
+    /// The card asks you to type the answer.
+    public let typeAnswer: Bool
+    /// The deck's auto-advance settings, when it uses them.
+    public let autoAdvance: AutoAdvance?
 
     enum CodingKeys: String, CodingKey {
         case id, question, answer, css, intervals, upcoming, occlusion, flag, marked
         case questionAudio = "question_audio"
         case answerAudio = "answer_audio"
+        case typeAnswer = "type_answer", autoAdvance = "auto_advance"
     }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int64.self, forKey: .id)
+        question = try c.decode(String.self, forKey: .question)
+        answer = try c.decode(String.self, forKey: .answer)
+        css = try c.decode(String.self, forKey: .css)
+        questionAudio = try c.decode([String].self, forKey: .questionAudio)
+        answerAudio = try c.decode([String].self, forKey: .answerAudio)
+        intervals = try c.decode([String].self, forKey: .intervals)
+        upcoming = try c.decodeIfPresent(String.self, forKey: .upcoming)
+        occlusion = try c.decodeIfPresent(OcclusionFields.self, forKey: .occlusion)
+        flag = try c.decode(Int.self, forKey: .flag)
+        marked = try c.decode(Bool.self, forKey: .marked)
+        typeAnswer = try c.decodeIfPresent(Bool.self, forKey: .typeAnswer) ?? false
+        autoAdvance = try c.decodeIfPresent(AutoAdvance.self, forKey: .autoAdvance)
+    }
+}
+
+/// A deck's auto-advance settings (Anki's deck options › Auto Advance).
+public struct AutoAdvance: Decodable, Equatable, Sendable {
+    /// Seconds before the answer shows (0 = off).
+    public let questionSeconds: Double
+    /// Seconds before the card is answered (0 = off).
+    public let answerSeconds: Double
+    /// 0 bury, 1 Again, 2 Good, 3 Hard, 4 just remind.
+    public let answerAction: Int
+    /// 0 show the answer, 1 just remind.
+    public let questionAction: Int
+    enum CodingKeys: String, CodingKey {
+        case questionSeconds = "question_seconds", answerSeconds = "answer_seconds"
+        case answerAction = "answer_action", questionAction = "question_action"
+    }
+}
+
+/// Cards left blank, e.g. after changing a card type.
+public struct EmptyCards: Decodable, Sendable {
+    /// Anki's own report, as HTML.
+    public let report: String
+    public let cardIDs: [Int64]
+    /// Notes that will go entirely (all their cards are empty).
+    public let notesRemoved: Int
+    enum CodingKeys: String, CodingKey { case report, cardIDs = "card_ids", notesRemoved = "notes_removed" }
 }
 
 /// The note behind an image occlusion card.
@@ -410,8 +458,17 @@ public struct DeckSettings: Codable, Equatable, Sendable {
     public var buryInterdayLearning: Bool
     public var desiredRetention: Double
     public var newRandom: Bool
+    /// Easy Days: Monday first; 1 = normal, 0.5 = reduced, 0 = minimum.
+    public var easyDays: [Double]
+    /// Auto-advance seconds (0 = off) and what happens after the answer.
+    public var autoQuestionSeconds: Double
+    public var autoAnswerSeconds: Double
+    /// 0 bury, 1 Again, 2 Good, 3 Hard, 4 just remind.
+    public var autoAnswerAction: Int
 
     enum CodingKeys: String, CodingKey {
+        case easyDays = "easy_days", autoQuestionSeconds = "auto_question_seconds"
+        case autoAnswerSeconds = "auto_answer_seconds", autoAnswerAction = "auto_answer_action"
         case newPerDay = "new_per_day", reviewsPerDay = "reviews_per_day"
         case learnSteps = "learn_steps", relearnSteps = "relearn_steps"
         case graduatingIntervalGood = "graduating_interval_good", graduatingIntervalEasy = "graduating_interval_easy"
@@ -978,6 +1035,58 @@ public actor Engine {
 
     public func undoStatus() throws -> UndoStatus {
         try call(study_undo_status, Optional<Int64>.none)
+    }
+
+    // MARK: Type the answer, empty cards, tags, saved searches, descriptions
+
+    /// The answer side with what you typed compared against the right answer.
+    public func typedAnswer(card: Int64, typed: String) throws -> (html: String, audio: [String]) {
+        struct Request: Encodable { let card_id: Int64; let typed: String }
+        struct Reply: Decodable { let answer: String; let answer_audio: [String] }
+        let reply: Reply = try call(study_typed_answer, Request(card_id: card, typed: typed))
+        return (reply.answer, reply.answer_audio)
+    }
+
+    public func emptyCards() throws -> EmptyCards {
+        let json = try Self.takeString(study_empty_cards(try open()))
+        return try JSONDecoder().decode(EmptyCards.self, from: Data(json.utf8))
+    }
+
+    /// Deletes cards (and notes left with none). Returns how many cards went.
+    public func removeCards(_ ids: [Int64]) throws -> Int {
+        try call(study_remove_cards, ids)
+    }
+
+    /// Renames a tag everywhere. Returns how many notes changed.
+    public func renameTag(_ old: String, to new: String) throws -> Int {
+        struct Request: Encodable { let old: String; let new: String }
+        return try call(study_rename_tag, Request(old: old, new: new))
+    }
+
+    /// Removes a tag from every note. Returns how many notes changed.
+    public func deleteTag(_ tag: String) throws -> Int {
+        try call(study_delete_tag, tag)
+    }
+
+    /// Forgets tags no note uses. Returns how many were cleared.
+    public func clearUnusedTags() throws -> Int {
+        let json = try Self.takeString(study_clear_unused_tags(try open()))
+        return try JSONDecoder().decode(Int.self, from: Data(json.utf8))
+    }
+
+    /// Saved Browse searches, {name: search}, shared with Anki through sync.
+    public func savedSearches() throws -> [String: String] {
+        let json = try Self.takeString(study_saved_searches(try open()))
+        return try JSONDecoder().decode([String: String].self, from: Data(json.utf8))
+    }
+
+    public func setSavedSearches(_ searches: [String: String]) throws {
+        let _: Bool = try call(study_set_saved_searches, searches)
+    }
+
+    /// The deck creator's description, as HTML (empty if none).
+    public func deckDescription(_ deck: Int64) throws -> String {
+        try call(study_deck_description, deck)
     }
 
     public func redo() throws {

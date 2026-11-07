@@ -219,6 +219,11 @@ extension CardWebView {
         to { opacity: 1; transform: none; }
       }
 
+      /* Type-the-answer: Anki's comparison of what you typed. */
+      #typeans { font-family: ui-monospace, Menlo, monospace; margin: .6em auto; text-align: center; }
+      .typeGood { background: rgba(48, 209, 88, .35); border-radius: 3px; }
+      .typeBad { background: rgba(255, 69, 58, .35); border-radius: 3px; }
+      .typeMissed { background: rgba(142, 142, 147, .35); border-radius: 3px; }
       .study-play {
         display: inline-flex; align-items: center; justify-content: center;
         width: 1.8em; height: 1.8em; margin: 0 .2em; border-radius: 50%;

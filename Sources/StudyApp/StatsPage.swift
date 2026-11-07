@@ -7,6 +7,7 @@ import StudyCore
 struct StatsPage: View {
     @Environment(Library.self) private var library
     @State private var stats: Stats?
+    @State private var plusStore = PlusStore.shared
     @State private var error: String?
     /// Limit the whole page to one deck (nil = every deck).
     @State private var scopeDeck: Int64?
@@ -36,6 +37,10 @@ struct StatsPage: View {
                 }
                 if let stats {
                     StatTiles(stats: stats)
+                    // Animus+ (Animus Dev only until it's ready): the week in words.
+                    if plusStore.showsPreviews && plusStore.showsPrompts && plusStore.isUnlocked(.weeklyReport) {
+                        WeeklyReportPanel(stats: stats, decks: decks)
+                    }
                     Panel(title: "Reviews over the last year") {
                         Heatmap(stats: stats)
                     }

@@ -5,7 +5,7 @@ import Foundation
 import StudyCore
 
 let args = CommandLine.arguments
-guard args.count == 2 || (args.count == 4 && args[2] == "study") || (args.count == 3 && ["stats", "add-test"].contains(args[2])) || (args.count == 4 && args[2] == "import") || (args.count >= 3 && args[2] == "browse") || (args.count == 3 && args[2] == "deckmenu") || (args.count == 3 && args[2] == "stocktypes") || (args.count == 3 && args[2] == "filtered") || (args.count == 3 && args[2] == "backuptest") || (args.count == 3 && args[2] == "actions") || (args.count == 3 && args[2] == "bulk") || (args.count == 3 && args[2] == "stats2") || (args.count == 3 && args[2] == "types") || (args.count == 3 && args[2] == "fsrsundo") || (args.count == 4 && args[2] == "house") || (args.count == 4 && args[2] == "occlusion") || (args.count == 5 && args[2] == "synctest") || (args.count == 3 && args[1] == "synclogin") else {
+guard args.count == 2 || (args.count == 4 && args[2] == "study") || (args.count == 3 && ["stats", "add-test"].contains(args[2])) || (args.count == 4 && args[2] == "import") || (args.count >= 3 && args[2] == "browse") || (args.count == 3 && args[2] == "deckmenu") || (args.count == 3 && args[2] == "stocktypes") || (args.count == 3 && args[2] == "filtered") || (args.count == 3 && args[2] == "backuptest") || (args.count == 3 && args[2] == "actions") || (args.count == 3 && args[2] == "bulk") || (args.count == 3 && args[2] == "gaps") || (args.count == 3 && args[2] == "stats2") || (args.count == 3 && args[2] == "types") || (args.count == 3 && args[2] == "fsrsundo") || (args.count == 4 && args[2] == "house") || (args.count == 4 && args[2] == "occlusion") || (args.count == 5 && args[2] == "synctest") || (args.count == 3 && args[1] == "synclogin") else {
     print("usage: study-cli <collection.anki2> [study <deck id>]")
     exit(2)
 }
@@ -44,6 +44,45 @@ do {
     let engine = try Engine(collectionPath: URL(fileURLWithPath: args[1]))
     if args.count == 2 {
         show(try await engine.decks())
+    } else if args[2] == "gaps" {
+        // The Anki gaps: type-in answers, empty cards, tags, saved searches, descriptions, deck options.
+        let types = try await engine.noteTypes()
+        let deck = try await engine.decks().first!.id
+        let typing = types.first { $0.kind == "typing" }!
+        let made = try await engine.addNote(noteType: typing.id, deck: deck, fields: ["Capital of France", "Paris"] + Array(repeating: "", count: max(0, typing.fields.count - 2)), tags: ["gaptest::child", "gaptest"])
+        print("typing note cards:", made)
+        let card = try await engine.search("tag:gaptest \"Capital of France\"").first!
+        for guess in ["Paris", "Pari", ""] {
+            let r = try await engine.typedAnswer(card: card, typed: guess)
+            let start = r.html.range(of: "typeans")
+            print("typed \"\(guess)\" ->", start == nil ? "NO COMPARISON" : String(r.html[start!.lowerBound...].prefix(220)))
+        }
+        try await engine.selectDeck(deck)
+        if let next = try await engine.nextCard().card { print("next card typeAnswer:", next.typeAnswer, "autoAdvance:", String(describing: next.autoAdvance)) }
+        let empty = try await engine.emptyCards()
+        print("empty cards:", empty.cardIDs.count, "report chars:", empty.report.count)
+        print("rename gaptest -> gapdone:", try await engine.renameTag("gaptest", to: "gapdone"))
+        print("tags now:", try await engine.allTags().filter { $0.hasPrefix("gap") })
+        print("delete gapdone:", try await engine.deleteTag("gapdone"))
+        print("clear unused:", try await engine.clearUnusedTags())
+        print("tags after:", try await engine.allTags().filter { $0.hasPrefix("gap") })
+        var saved = try await engine.savedSearches()
+        print("saved before:", saved)
+        saved["Gap test"] = "deck:current is:due"
+        try await engine.setSavedSearches(saved)
+        print("saved after:", try await engine.savedSearches())
+        print("description:", try await engine.deckDescription(deck).prefix(120))
+        let options = try await engine.deckOptions(deck)
+        var settings = options.settings
+        print("easy days before:", settings.easyDays, "auto:", settings.autoQuestionSeconds, settings.autoAnswerSeconds, settings.autoAnswerAction)
+        settings.easyDays = [1, 1, 1, 1, 1, 0.5, 0]
+        settings.autoQuestionSeconds = 8
+        settings.autoAnswerSeconds = 5
+        settings.autoAnswerAction = 3
+        try await engine.saveDeckOptions(deck: deck, preset: options.presetID, settings: settings, fsrs: options.fsrs)
+        let again = try await engine.deckOptions(deck).settings
+        print("easy days after:", again.easyDays, "auto:", again.autoQuestionSeconds, again.autoAnswerSeconds, again.autoAnswerAction)
+        if let next = try await engine.nextCard().card { print("next card autoAdvance:", String(describing: next.autoAdvance)) }
     } else if args[2] == "add-test" {
         let types = try await engine.noteTypes()
         print("card types:", types.map { "\($0.name) [\($0.kind)] \($0.fields)" })

@@ -7,9 +7,13 @@ import Foundation
 /// still open after the original is moved or renamed, and macOS doesn't
 /// block reading them from Documents or Downloads on the next launch.
 enum ReferenceStore {
-    /// ~/Library/Application Support/StudyApp/References/
-    static let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("StudyApp/References", isDirectory: true)
+    /// ~/Library/Application Support/StudyApp/References/, or inside the test
+    /// folder for a test copy (so Animus Dev never puts files in the real one).
+    static let folder: URL = Library.isTestCollection
+        ? URL(fileURLWithPath: ProcessInfo.processInfo.environment["ITERUM_DATA_FOLDER"] ?? "", isDirectory: true)
+            .appendingPathComponent("References", isDirectory: true)
+        : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("StudyApp/References", isDirectory: true)
 
     /// File types the panel can show.
     static let extensions = ["pdf", "pptx", "ppt", "key", "docx", "doc", "rtf", "txt"]

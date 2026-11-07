@@ -2,33 +2,48 @@ import AppKit
 import SwiftUI
 
 /// Settings › Animus: the version, your plan, a product key, feedback and
-/// donations. Animus+, product keys, feedback and donations aren't set up yet,
-/// so those buttons say "coming soon" rather than doing anything.
+/// donations. Feedback and donations aren't set up yet, so they say "coming
+/// soon"; the plan and key go through `PlusStore` (no server yet, so keys
+/// can't be confirmed and nothing is saved).
 struct AnimusSettings: View {
     @AppStorage(Pref.accent) private var accent = AccentChoice.blue
     @State private var productKey = ""
     @State private var comingSoon: ComingSoon?
+    @State private var plus = PlusStore.shared
+    @State private var showingPlus = false
+    @State private var keyMessage: String?
+    @State private var activating = false
 
     enum ComingSoon: String, Identifiable {
-        case productKey, feedback, donate, animusPlus
+        case feedback, donate
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .productKey: "Product keys aren't available yet"
             case .feedback: "Feedback is coming soon"
             case .donate: "Donations are coming soon"
-            case .animusPlus: "Animus+ is coming soon"
             }
         }
 
         var message: String {
             switch self {
-            case .productKey: "When Animus+ launches, you'll be able to enter your key here to unlock it."
             case .feedback: "Soon you'll be able to send ideas and report problems from here."
             case .donate: "Soon you'll be able to support Animus from here. Thank you for thinking of it."
-            case .animusPlus: "Animus+ will add extra features on top of everything in the free version. More details soon."
             }
+        }
+    }
+
+    private var planDetail: String {
+        guard let renews = plus.license?.renews else { return "Thank you for supporting Animus." }
+        return "Renews \(renews.formatted(date: .abbreviated, time: .omitted))."
+    }
+
+    private func activate() {
+        guard !productKey.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        activating = true
+        Task {
+            keyMessage = await plus.activate(productKey)
+            activating = false
         }
     }
 
@@ -62,17 +77,20 @@ struct AnimusSettings: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Your plan").font(.headline)
                 HStack(spacing: 12) {
-                    Text("Free")
-                        .font(.callout.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color.secondary.opacity(0.15)))
-                    Text("Everything you need to study, free.")
+                    HStack(spacing: 6) {
+                        Text(plus.planTitle)
+                        if plus.hasPlus { PlusBadge() }
+                    }
+                    .font(.callout.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                    Text(plus.hasPlus ? planDetail : "Everything you need to study, free.")
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
                 Button {
-                    comingSoon = .animusPlus
+                    showingPlus = true
                 } label: {
                     HStack(spacing: 10) {
                         AnimusPlusGlyph(size: 20)
@@ -84,6 +102,18 @@ struct AnimusSettings: View {
                 .tip("What Animus+ will add")
             }
 
+            // Free users can switch off Plus buttons and badges around the app.
+            if !plus.hasPlus {
+                Toggle(isOn: $plus.showPrompts) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Show Animus+ suggestions")
+                        Text("Plus buttons and badges around the app. Turn off to hide them; you can still find Animus+ here.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+            }
+
             // A product key.
             VStack(alignment: .leading, spacing: 8) {
                 Text("Product key").font(.headline)
@@ -91,13 +121,49 @@ struct AnimusSettings: View {
                     TextField("XXXXX-XXXXX-XXXXX-XXXXX", text: $productKey)
                         .textFieldStyle(.roundedBorder)
                         .font(.body.monospaced())
-                        .onSubmit { comingSoon = .productKey }
-                    Button("Activate") { comingSoon = .productKey }
-                        .disabled(productKey.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .onSubmit { activate() }
+                        .onChange(of: productKey) { keyMessage = nil }
+                    Button {
+                        activate()
+                    } label: {
+                        if activating { ProgressView().controlSize(.small) } else { Text("Activate") }
+                    }
+                    .disabled(productKey.trimmingCharacters(in: .whitespaces).isEmpty || activating)
                 }
-                Text("Have an Animus+ key? Enter it here to unlock Animus+.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let keyMessage {
+                    Label(keyMessage, systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("Have an Animus+ key? Enter it here to unlock Animus+.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Animus+ (Animus Dev only until it's ready): explain cards you get wrong.
+            if plus.showsPreviews && plus.hasPlus {
+                Toggle(isOn: $plus.explainMistakes) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) { Text("Explain cards I get wrong"); PlusBadge() }
+                        Text("After you press Again, a short note on why, and a way to remember it.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+            }
+
+            // Animus Dev only: switch Animus+ on, to build and try its screens.
+            if plus.showsPreviews {
+                Toggle(isOn: $plus.devPreview) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Preview Animus+ (Animus Dev only)")
+                        Text("Unlocks Plus features in this dev copy, without a key. Never in the real app.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
             }
 
             Divider()
@@ -121,6 +187,7 @@ struct AnimusSettings: View {
             .controlSize(.large)
         }
         .padding(24)
+        .sheet(isPresented: $showingPlus) { PlusInfoSheet() }
         .alert(item: $comingSoon) { item in
             Alert(title: Text(item.title), message: Text(item.message), dismissButton: .default(Text("OK")))
         }

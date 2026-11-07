@@ -28,6 +28,7 @@ struct CardMenuButton: View {
     let session: StudySession
     let card: StudyCard
     @State private var open = false
+    @State private var explainPlus = false
 
     var body: some View {
         Button { open.toggle() } label: {
@@ -38,8 +39,9 @@ struct CardMenuButton: View {
         .buttonStyle(.hoverable)
         .tip("Edit, flag, bury and more for this card")
         .popover(isPresented: $open, arrowEdge: .bottom) {
-            CardMenu(session: session, card: card) { open = false }
+            CardMenu(session: session, card: card, close: { open = false }, explainPlus: $explainPlus)
         }
+        .sheet(isPresented: $explainPlus) { PlusInfoSheet(highlight: .askAnimus) }
     }
 
     @ViewBuilder private var statusDot: some View {
@@ -55,6 +57,8 @@ private struct CardMenu: View {
     let session: StudySession
     let card: StudyCard
     let close: () -> Void
+    @State private var plus = PlusStore.shared
+    @Binding var explainPlus: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -70,6 +74,31 @@ private struct CardMenu: View {
             row("Bury until tomorrow", "moon.zzz", .indigo, key: "−") { Task { await session.bury() } }
             row("Suspend", "pause.circle", .orange, key: "@") { Task { await session.suspend() } }
             row("Card info", "info.circle", .teal, key: "I") { session.info = card.id }
+            row(session.voice.isRecording ? "Stop recording" : "Record your voice", "mic", .red, key: "⇧V") {
+                Task { await session.toggleVoiceRecording() }
+            }
+            if session.voice.hasRecording {
+                row("Play your recording", "play.circle", .blue, key: "V") { session.replayVoice() }
+            }
+            if session.hasAutoAdvance {
+                row(session.autoAdvancePaused ? "Resume auto advance" : "Pause auto advance",
+                    session.autoAdvancePaused ? "forward.end" : "pause", .accentColor, key: "⇧A") {
+                    session.toggleAutoAdvance()
+                }
+            }
+            // Animus+ (Animus Dev only until the AI is connected).
+            if plus.showsPreviews && plus.showsPrompts {
+                MenuRow(title: "Ask Animus", symbol: PlusFeature.askAnimus.symbol, color: .purple, key: nil,
+                        badge: true) {
+                    close()
+                    if plus.isUnlocked(.askAnimus) { session.askingAnimus = true } else { explainPlus = true }
+                }
+                MenuRow(title: "Fix my card", symbol: PlusFeature.fixCard.symbol, color: .purple, key: nil,
+                        badge: true) {
+                    close()
+                    if plus.isUnlocked(.fixCard) { session.fixingCard = card.id } else { explainPlus = true }
+                }
+            }
 
             Divider().padding(.vertical, 6)
 
@@ -128,6 +157,8 @@ private struct MenuRow: View {
     let color: Color
     let key: String?
     var destructive = false
+    /// Shows the PLUS badge (an Animus+ feature).
+    var badge = false
     let action: () -> Void
     @State private var hovering = false
 
@@ -141,6 +172,7 @@ private struct MenuRow: View {
                     .background(RoundedRectangle(cornerRadius: 7).fill(color.opacity(0.15)))
                 Text(title)
                     .foregroundStyle(destructive ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
+                if badge { PlusBadge() }
                 Spacer()
                 if let key { KeyCap(key) }
             }
@@ -183,6 +215,14 @@ private struct StudyActionSheets: ViewModifier {
             }
             .sheet(item: Binding(get: { session.info.map(CardRef.init) }, set: { session.info = $0?.id })) { ref in
                 CardInfoSheet(cardID: ref.id)
+            }
+            .sheet(item: Binding(get: { session.fixingCard.map(CardRef.init) }, set: { session.fixingCard = $0?.id })) { ref in
+                FixCardSheet(cardID: ref.id) { Task { await session.refreshAfterEdit() } }
+            }
+            .sheet(isPresented: $session.askingAnimus) {
+                if let card = session.card {
+                    AskAnimusSheet(context: AskContext(card: card, deck: nil))
+                }
             }
             .sheet(item: Binding(get: { session.settingDue.map(CardRef.init) }, set: { session.settingDue = $0?.id })) { _ in
                 SetDueSheet { days in Task { await session.setDue(days) } }

@@ -308,6 +308,8 @@ struct CollectionToolsView: View {
     @State private var exportMedia = true
     @State private var message: String?
     @State private var confirmTrash = false
+    @State private var empty: EmptyCards?
+    @State private var confirmEmpty = false
 
     var body: some View {
         ScrollView {
@@ -330,6 +332,33 @@ struct CollectionToolsView: View {
                     }
                 }
 
+                section("Empty Cards",
+                        "Finds cards left blank, for example after you change a card type so one side has nothing on it. You see them before anything is deleted.") {
+                    HStack {
+                        runButton("Find Empty Cards", "rectangle.dashed", "empty") { await findEmptyCards() }
+                        if let empty, empty.cardIDs.isEmpty {
+                            Label("No empty cards.", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                        }
+                    }
+                    if let empty, !empty.cardIDs.isEmpty {
+                        Text(empty.cardIDs.count == 1 ? "1 empty card" : "\(empty.cardIDs.count) empty cards")
+                            .font(.callout.weight(.semibold))
+                        Text(HTMLText.plain(empty.report))
+                            .font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(8)
+                        Button(role: .destructive) { confirmEmpty = true } label: {
+                            Label("Delete \(empty.cardIDs.count == 1 ? "It" : "Them")…", systemImage: "trash")
+                        }
+                        .confirmationDialog("Delete \(empty.cardIDs.count == 1 ? "1 empty card" : "\(empty.cardIDs.count) empty cards")?",
+                                            isPresented: $confirmEmpty) {
+                            Button("Delete", role: .destructive) { Task { await deleteEmptyCards() } }
+                        } message: {
+                            Text(empty.notesRemoved > 0
+                                 ? "\(empty.notesRemoved) note\(empty.notesRemoved == 1 ? "" : "s") with nothing left will go too. You can undo this straight after with ⌘Z."
+                                 : "Their notes stay. You can undo this straight after with ⌘Z.")
+                        }
+                    }
+                }
                 section("Check Media",
                         "Finds pictures and sounds no card uses (taking up space), and ones your cards need but are missing.") {
                     HStack {
@@ -404,6 +433,21 @@ struct CollectionToolsView: View {
         await library.backup(force: true)
         do {
             dbResult = try await engine.checkDatabase()
+            await library.refresh()
+        } catch { message = error.localizedDescription }
+    }
+
+    private func findEmptyCards() async {
+        guard let engine = library.engine else { return }
+        do { empty = try await engine.emptyCards() } catch { message = error.localizedDescription }
+    }
+
+    private func deleteEmptyCards() async {
+        guard let engine = library.engine, let ids = empty?.cardIDs, !ids.isEmpty else { return }
+        do {
+            let count = try await engine.removeCards(ids)
+            message = "Deleted \(count) empty card\(count == 1 ? "" : "s")."
+            empty = nil
             await library.refresh()
         } catch { message = error.localizedDescription }
     }

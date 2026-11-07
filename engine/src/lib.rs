@@ -236,6 +236,22 @@ struct CardJson {
     flag: u32,
     /// The note has the "marked" tag.
     marked: bool,
+    /// The card asks you to type the answer ({{type:Field}}).
+    type_answer: bool,
+    /// The deck's auto-advance settings, if it uses them.
+    auto_advance: Option<AutoAdvanceJson>,
+}
+
+#[derive(Serialize)]
+struct AutoAdvanceJson {
+    /// Seconds before the answer is shown (0 = off).
+    question_seconds: f32,
+    /// Seconds before the card is answered (0 = off).
+    answer_seconds: f32,
+    /// 0 bury, 1 Again, 2 Good, 3 Hard, 4 just remind.
+    answer_action: i32,
+    /// 0 show the answer, 1 just remind.
+    question_action: i32,
 }
 
 #[derive(Serialize)]
@@ -355,8 +371,15 @@ fn next_card(inner: &mut Inner) -> anki::error::Result<StudyCardJson> {
 
     let rendered = inner.col.render_existing_card(next.card.id(), false, false)?;
     let tr = I18n::template_only();
-    let (question, question_audio) = prepare_side(&rendered.question(), true, &tr);
-    let (answer, answer_audio) = prepare_side(&rendered.answer(), false, &tr);
+    // Type-the-answer cards: the box is drawn by the app, so the question loses
+    // Anki's marker, and the answer shows the right answer where it was.
+    let raw_question = rendered.question().into_owned();
+    let type_answer = type_marker(&raw_question).is_some();
+    let question_html = strip_type_marker(&raw_question);
+    let answer_html = fill_type_answer(&mut inner.col, next.card.id(), &rendered.answer(), "");
+    let (question, question_audio) = prepare_side(&question_html, true, &tr);
+    let (answer, answer_audio) = prepare_side(&answer_html, false, &tr);
+    let auto_advance = auto_advance_for(&mut inner.col, &next.card);
     let intervals = inner.col.describe_next_states(&next.states)?;
     // Best effort: a failure here shouldn't stop studying.
     let upcoming = cards.next().and_then(|after| {
@@ -387,6 +410,8 @@ fn next_card(inner: &mut Inner) -> anki::error::Result<StudyCardJson> {
         occlusion,
         flag,
         marked,
+        type_answer,
+        auto_advance,
     };
     inner.current = Some((next.card.id(), next.states));
     Ok(StudyCardJson { card: Some(card), counts })
@@ -1443,6 +1468,22 @@ struct DeckSettingsJson {
     desired_retention: f32,
     /// true = new cards in random order, false = in the order added.
     new_random: bool,
+    /// Easy Days (FSRS): how much to study on each weekday, Monday first;
+    /// 1 = normal, 0.5 = reduced, 0 = minimum.
+    #[serde(default = "normal_days")]
+    easy_days: Vec<f32>,
+    /// Auto-advance: seconds before showing the answer / answering (0 = off).
+    #[serde(default)]
+    auto_question_seconds: f32,
+    #[serde(default)]
+    auto_answer_seconds: f32,
+    /// 0 bury, 1 Again, 2 Good, 3 Hard, 4 just remind.
+    #[serde(default)]
+    auto_answer_action: i32,
+}
+
+fn normal_days() -> Vec<f32> {
+    vec![1.0; 7]
 }
 
 #[derive(Serialize)]
@@ -1479,6 +1520,10 @@ fn settings_from(inner: &anki_proto::deck_config::deck_config::Config) -> DeckSe
         bury_interday_learning: inner.bury_interday_learning,
         desired_retention: inner.desired_retention,
         new_random: inner.new_card_insert_order() == NewCardInsertOrder::Random,
+        easy_days: if inner.easy_days_percentages.len() == 7 { inner.easy_days_percentages.clone() } else { normal_days() },
+        auto_question_seconds: inner.seconds_to_show_question,
+        auto_answer_seconds: inner.seconds_to_show_answer,
+        auto_answer_action: inner.answer_action,
     }
 }
 
@@ -1578,6 +1623,12 @@ pub unsafe extern "C" fn study_save_deck_options(engine: *mut Engine, json: *con
                 } else {
                     NewCardInsertOrder::Due
                 });
+                if s.easy_days.len() == 7 {
+                    c.easy_days_percentages = s.easy_days.iter().map(|v| v.clamp(0.0, 1.0)).collect();
+                }
+                c.seconds_to_show_question = s.auto_question_seconds.clamp(0.0, 600.0);
+                c.seconds_to_show_answer = s.auto_answer_seconds.clamp(0.0, 600.0);
+                c.answer_action = s.auto_answer_action.clamp(0, 4);
             }
             let request = UpdateDeckConfigsRequest {
                 target_deck_id: DeckId(req.deck_id),
@@ -3193,6 +3244,293 @@ pub unsafe extern "C" fn study_media_progress(engine: *mut Engine, json: *const 
                 downloaded: added.get(1).copied().unwrap_or(0),
                 removed: removed.iter().sum(),
             })
+        })
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Type the answer
+// ---------------------------------------------------------------------------
+
+/// Anki's `[[type:Field]]` marker (also `[[type:cloze:Field]]`, `[[type:nc:Field]]`):
+/// where it is, and what's inside.
+fn type_marker(html: &str) -> Option<(std::ops::Range<usize>, String)> {
+    let start = html.find("[[type:")?;
+    let end = start + html[start..].find("]]")? + 2;
+    Some((start..end, html[start + 7..end - 2].to_string()))
+}
+
+fn strip_type_marker(html: &str) -> String {
+    match type_marker(html) {
+        Some((range, _)) => format!("{}{}", &html[..range.start], &html[range.end..]),
+        None => html.to_string(),
+    }
+}
+
+/// The answer the card expects, as plain text, and whether accents count.
+fn expected_typed_answer(col: &mut anki::collection::Collection, card_id: anki::card::CardId, spec: &str) -> Option<(String, bool)> {
+    let card = col.storage.get_card(card_id).ok()??;
+    let note = col.storage.get_note(card.note_id()).ok()??;
+    let notetype = col.get_notetype(note.notetype_id).ok()??;
+    let mut field = spec;
+    let mut cloze = false;
+    let mut combining = true;
+    loop {
+        if let Some(rest) = field.strip_prefix("cloze:") {
+            cloze = true;
+            field = rest;
+        } else if let Some(rest) = field.strip_prefix("nc:") {
+            combining = false;
+            field = rest;
+        } else {
+            break;
+        }
+    }
+    let index = notetype.fields.iter().position(|f| f.name == field)?;
+    let raw = note.fields().get(index)?.clone();
+    let text = if cloze {
+        anki::cloze::extract_cloze_for_typing(&raw, card.template_idx() + 1).into_owned()
+    } else {
+        raw
+    };
+    Some((anki::text::html_to_text_line(&text, true).into_owned(), combining))
+}
+
+/// Replaces the marker on the answer side with Anki's comparison of what you
+/// typed against the expected answer (just the answer when nothing was typed).
+fn fill_type_answer(col: &mut anki::collection::Collection, card_id: anki::card::CardId, html: &str, typed: &str) -> String {
+    use anki::services::CardRenderingService;
+    let Some((range, spec)) = type_marker(html) else { return html.to_string() };
+    let compared = expected_typed_answer(col, card_id, &spec)
+        .and_then(|(expected, combining)| {
+            CardRenderingService::compare_answer(
+                col,
+                anki_proto::card_rendering::CompareAnswerRequest { expected, provided: typed.to_string(), combining },
+            )
+            .ok()
+            .map(|s| s.val)
+        })
+        .unwrap_or_default();
+    format!("{}<div id=\"typeans\">{}</div>{}", &html[..range.start], compared, &html[range.end..])
+}
+
+#[derive(serde::Deserialize)]
+struct TypedAnswerRequest {
+    card_id: i64,
+    typed: String,
+}
+
+#[derive(Serialize)]
+struct TypedAnswerJson {
+    answer: String,
+    answer_audio: Vec<String>,
+}
+
+/// The answer side, with what you typed compared against the right answer.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_typed_answer(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    unsafe {
+        with_request(engine, json, |inner, req: TypedAnswerRequest| {
+            let id = anki::card::CardId(req.card_id);
+            let rendered = inner.col.render_existing_card(id, false, false).map_err(|e| e.to_string())?;
+            let html = fill_type_answer(&mut inner.col, id, &rendered.answer(), &req.typed);
+            let (answer, answer_audio) = prepare_side(&html, false, &I18n::template_only());
+            Ok(TypedAnswerJson { answer, answer_audio })
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-advance
+// ---------------------------------------------------------------------------
+
+fn auto_advance_for(col: &mut anki::collection::Collection, card: &anki::card::Card) -> Option<AutoAdvanceJson> {
+    use anki::deckconfig::DeckConfigId;
+    let proto = anki_proto::cards::Card::from(card.clone());
+    let deck_id = if proto.original_deck_id != 0 { proto.original_deck_id } else { proto.deck_id };
+    let deck = col.get_deck(DeckId(deck_id)).ok()??;
+    let config = col.get_deck_config(deck.config_id()?, true).ok()??;
+    let c = &config.inner;
+    if c.seconds_to_show_question <= 0.0 && c.seconds_to_show_answer <= 0.0 {
+        return None;
+    }
+    let _ = DeckConfigId(0);
+    Some(AutoAdvanceJson {
+        question_seconds: c.seconds_to_show_question,
+        answer_seconds: c.seconds_to_show_answer,
+        answer_action: c.answer_action,
+        question_action: c.question_action,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Empty cards
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct EmptyCardsJson {
+    /// Anki's own report, as HTML.
+    report: String,
+    card_ids: Vec<i64>,
+    /// Notes that would be removed entirely (every card empty).
+    notes_removed: usize,
+}
+
+/// Cards left blank (e.g. after changing a card type), to review and delete.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`.
+#[no_mangle]
+pub unsafe extern "C" fn study_empty_cards(engine: *mut Engine) -> *mut c_char {
+    use anki::services::CardRenderingService;
+    let Some(engine) = (unsafe { engine.as_ref() }) else {
+        set_error("collection is not open");
+        return std::ptr::null_mut();
+    };
+    let Some(mut inner) = engine.lock() else { return std::ptr::null_mut() };
+    match CardRenderingService::get_empty_cards(&mut inner.col) {
+        Ok(found) => to_json(&EmptyCardsJson {
+            report: found.report,
+            notes_removed: found.notes.iter().filter(|n| n.will_delete_note).count(),
+            card_ids: found.notes.into_iter().flat_map(|n| n.card_ids).collect(),
+        }),
+        Err(err) => {
+            set_error(format!("could not check for empty cards: {err}"));
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Deletes the given cards (and any notes left with none). Undoable.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_remove_cards(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    use anki::services::CardsService;
+    unsafe {
+        with_request(engine, json, |inner, ids: Vec<i64>| {
+            inner.current = None;
+            let out = CardsService::remove_cards(&mut inner.col, anki_proto::cards::RemoveCardsRequest { card_ids: ids })
+                .map_err(|e| e.to_string())?;
+            Ok(out.count)
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Deserialize)]
+struct RenameTagRequest {
+    old: String,
+    new: String,
+}
+
+/// Renames a tag everywhere (and its child tags, e.g. anatomy::heart). Undoable.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_rename_tag(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    unsafe {
+        with_request(engine, json, |inner, req: RenameTagRequest| {
+            let new = req.new.trim().replace(' ', "_");
+            if new.is_empty() {
+                return Err("the tag needs a name".to_string());
+            }
+            Ok(inner.col.rename_tag(req.old.trim(), &new).map_err(|e| e.to_string())?.output)
+        })
+    }
+}
+
+/// Removes a tag from every note. Undoable.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_delete_tag(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    unsafe {
+        with_request(engine, json, |inner, tag: String| {
+            Ok(inner.col.remove_tags(tag.trim()).map_err(|e| e.to_string())?.output)
+        })
+    }
+}
+
+/// Forgets tags no note uses any more. Undoable.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`.
+#[no_mangle]
+pub unsafe extern "C" fn study_clear_unused_tags(engine: *mut Engine) -> *mut c_char {
+    unsafe {
+        with_request(engine, c"null".as_ptr(), |inner, _: Option<i64>| {
+            Ok(inner.col.clear_unused_tags().map_err(|e| e.to_string())?.output)
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Saved searches (Anki's "savedFilters", so they sync with Anki)
+// ---------------------------------------------------------------------------
+
+/// Saved searches as {name: search}.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`.
+#[no_mangle]
+pub unsafe extern "C" fn study_saved_searches(engine: *mut Engine) -> *mut c_char {
+    use anki::services::ConfigService;
+    unsafe {
+        with_request(engine, c"null".as_ptr(), |inner, _: Option<i64>| {
+            let json = ConfigService::get_config_json(&mut inner.col, "savedFilters".to_string().into())
+                .map(|j| j.json)
+                .unwrap_or_default();
+            let map: std::collections::BTreeMap<String, String> = serde_json::from_slice(&json).unwrap_or_default();
+            Ok(map)
+        })
+    }
+}
+
+/// Replaces the saved searches. Undoable.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_set_saved_searches(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    use anki::services::ConfigService;
+    unsafe {
+        with_request(engine, json, |inner, map: std::collections::BTreeMap<String, String>| {
+            let value_json = serde_json::to_vec(&map).map_err(|e| e.to_string())?;
+            ConfigService::set_config_json(
+                &mut inner.col,
+                anki_proto::config::SetConfigJsonRequest { key: "savedFilters".into(), value_json, undoable: true },
+            )
+            .map_err(|e| e.to_string())?;
+            Ok(true)
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Deck descriptions
+// ---------------------------------------------------------------------------
+
+/// The deck's description (from its creator), as safe HTML; empty if none.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_deck_description(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    unsafe {
+        with_request(engine, json, |inner, deck_id: i64| {
+            let deck = inner.col.get_deck(DeckId(deck_id)).map_err(|e| e.to_string())?;
+            Ok(deck.map(|d| d.rendered_description()).unwrap_or_default())
         })
     }
 }

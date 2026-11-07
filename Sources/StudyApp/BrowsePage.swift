@@ -13,6 +13,9 @@ struct BrowsePage: View {
     @State private var showTips = false
     @State private var sheet: BrowseSheet?
     @State private var confirmForget = false
+    @State private var saved: [String: String] = [:]
+    @State private var namingSearch = false
+    @State private var searchName = ""
     @AppStorage("browse.showReference") private var showReference = false
 
     var body: some View {
@@ -95,6 +98,42 @@ struct BrowsePage: View {
     /// in a narrow window the deck and tips move to a second row so the
     /// filters are never squeezed out.
     private var filterBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            filterRows
+            if !saved.isEmpty {
+                SavedSearchesRow(saved: saved, current: model.query) { search in
+                    model.filter = .all
+                    model.deckID = nil
+                    model.query = search
+                } remove: { name in
+                    saved[name] = nil
+                    let copy = saved
+                    Task { try? await library.engine?.setSavedSearches(copy) }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .task { saved = (try? await library.engine?.savedSearches()) ?? [:] }
+        .alert("Save this search", isPresented: $namingSearch) {
+            TextField("Name, e.g. Cardio to review", text: $searchName)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { saveSearch() }
+        } message: {
+            Text(model.searchText(decks: decks))
+        }
+    }
+
+    private func saveSearch() {
+        let name = searchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let search = model.searchText(decks: decks)
+        guard !name.isEmpty, !search.isEmpty else { return }
+        saved[name] = search
+        let copy = saved
+        Task { try? await library.engine?.setSavedSearches(copy) }
+    }
+
+    private var filterRows: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) {
                 filterChips.fixedSize()
@@ -109,8 +148,6 @@ struct BrowsePage: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
     }
 
     private var filterChips: some View {
@@ -165,6 +202,20 @@ struct BrowsePage: View {
                 Label("Duplicates", systemImage: "square.on.square")
             }
             .tip("Find notes with the same front, in what's shown now")
+            Button {
+                sheet = .manageTags
+            } label: {
+                Label("Tags", systemImage: "tag")
+            }
+            .tip("See every tag: search, rename or delete them")
+            Button {
+                searchName = ""
+                namingSearch = true
+            } label: {
+                Label("Save Search", systemImage: "bookmark")
+            }
+            .tip("Keep what's shown now as a saved search (it syncs with Anki)")
+            .disabled(model.searchText(decks: decks).isEmpty)
             Text("In").foregroundStyle(.secondary)
             DeckPickerButton(decks: decks, selection: $model.deckID, emptyTitle: "All decks", allowsAll: true)
                 .frame(width: 260)

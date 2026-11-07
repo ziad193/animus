@@ -755,11 +755,17 @@ private struct DeckPage: View {
     let open: (Deck) -> Void
     let study: (Deck) -> Void
     let browse: (Deck) -> Void
+    @Environment(Library.self) private var library
+    @State private var plusStore = PlusStore.shared
+    @State private var practising = false
+    @State private var description = ""
+    @State private var showWholeDescription = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 header
+                if !description.isEmpty { descriptionBox }
                 DueSummary(new: deck.newCount, learn: deck.learnCount, review: deck.reviewCount)
                 if !deck.children.isEmpty {
                     TileGrid(title: "Sections", decks: deck.children, open: open)
@@ -770,6 +776,29 @@ private struct DeckPage: View {
             .frame(maxWidth: .infinity)
         }
         .navigationTitle(deck.shortName)
+        .task(id: deck.id) {
+            showWholeDescription = false
+            let html = (try? await library.engine?.deckDescription(deck.id)) ?? ""
+            description = HTMLText.plain(html).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    /// The deck's description, as written by whoever made it (shared decks
+    /// often explain their tags and sources here).
+    private var descriptionBox: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("About this deck").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(description)
+                .textSelection(.enabled)
+                .lineLimit(showWholeDescription ? nil : 4)
+                .frame(maxWidth: 820, alignment: .leading)
+            if description.count > 280 || description.filter({ $0 == "\n" }).count > 3 {
+                Button(showWholeDescription ? "Show less" : "Show more") {
+                    withAnimation(.easeOut(duration: 0.2)) { showWholeDescription.toggle() }
+                }
+                .buttonStyle(.link)
+            }
+        }
     }
 
     private var header: some View {
@@ -798,6 +827,15 @@ private struct DeckPage: View {
             }
             .controlSize(.large)
             .tip("See, search and edit every card in this deck")
+            // Animus+ (Animus Dev only until it's ready): exam-style questions.
+            if plusStore.showsPreviews && plusStore.showsPrompts {
+                PlusFeatureButton(feature: .practiceQuestions) { practising = true } label: {
+                    Label("Practice", systemImage: PlusFeature.practiceQuestions.symbol)
+                        .padding(.vertical, 4)
+                }
+                .controlSize(.large)
+                .sheet(isPresented: $practising) { PracticeSheet(deck: deck) }
+            }
             DeckMenu(deck: deck, size: 17)
             if deck.dueToday > 0 {
                 Button {
