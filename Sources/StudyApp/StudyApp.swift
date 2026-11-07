@@ -122,6 +122,8 @@ private struct ProfileScope: ViewModifier {
 
     func body(content: Content) -> some View {
         ThemedContent(content: content)
+            // Animus Dev only: a red strip saying so, at the top of every window.
+            .safeAreaInset(edge: .top, spacing: 0) { DevBuildBanner() }
             .buttonStyle(.hoverBordered)
             .environment(session.library)
             .environment(session.pomodoro)

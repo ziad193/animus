@@ -131,9 +131,13 @@ private struct TipView: NSViewRepresentable {
         if view.toolTip != text { view.toolTip = text }
     }
 
-    /// Only there for its tip (clicks go through: see `allowsHitTesting` below).
+    /// Only there for its tip. It never takes the mouse: AppKit asks views like
+    /// this directly, whatever SwiftUI's `allowsHitTesting` says, so without
+    /// this a tip left over from another page could swallow clicks meant for
+    /// the buttons underneath. Tips still show (macOS tracks them separately).
     final class TipNSView: NSView {
         override var acceptsFirstResponder: Bool { false }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
 

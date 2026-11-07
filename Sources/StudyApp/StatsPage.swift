@@ -72,6 +72,7 @@ struct StatsPage: View {
             .frame(maxWidth: 1280, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .pageBackground()
         .task(id: scopeDeck) { await load() }
     }
 
@@ -133,7 +134,7 @@ private struct StatTiles: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 14).fill(.background))
+        .background(BlockFill(cornerRadius: 14, plain: AnyShapeStyle(.background)))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.separator.opacity(0.5)))
     }
 }
@@ -149,7 +150,7 @@ private struct Panel<Content: View>: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(.background))
+        .background(BlockFill(cornerRadius: 16, plain: AnyShapeStyle(.background)))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator.opacity(0.5)))
     }
 }
@@ -521,19 +522,31 @@ private struct CardBreakdown: View {
 // MARK: - Coming up
 
 private struct DueAheadChart: View {
+    /// Cards due per day from today (0); negative days are overdue.
     let dueAhead: [Int: Int]
     @AppStorage(Pref.accent) private var accent = AccentChoice.blue
     @AppStorage("stats.comingUpDays") private var range = 30
-    @State private var hovered: Int?
+    @State private var hovered: Date?
 
-    private var days: [(day: Int, count: Int)] { (0...range).map { ($0, dueAhead[$0] ?? 0) } }
+    /// Overdue cards: they're waiting today, so they count towards today's bar.
+    private var overdue: Int { dueAhead.filter { $0.key < 0 }.reduce(0) { $0 + $1.value } }
+
+    private func count(_ day: Int) -> Int { (dueAhead[day] ?? 0) + (day == 0 ? overdue : 0) }
+
+    private var days: [(day: Int, count: Int)] { (0..<range).map { ($0, count($0)) } }
     private var total: Int { days.reduce(0) { $0 + $1.count } }
-    private var nextWeek: Int { (0...6).reduce(0) { $0 + (dueAhead[$1] ?? 0) } }
-    private var average: Double { Double(total) / Double(days.count) }
+    private var nextWeek: Int { (0..<7).reduce(0) { $0 + count($1) } }
+    /// A normal day: the overdue backlog is left out, or it would swamp the average.
+    private var average: Double { Double(total - overdue) / Double(max(days.count, 1)) }
     private var busiest: (day: Int, count: Int)? { days.max { $0.count < $1.count } }
 
     private func date(_ offset: Int) -> Date {
         Calendar.current.date(byAdding: .day, value: offset, to: Calendar.current.startOfDay(for: Date())) ?? Date()
+    }
+
+    private func offset(of date: Date) -> Int {
+        Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()),
+                                        to: Calendar.current.startOfDay(for: date)).day ?? 0
     }
 
     private func label(_ offset: Int) -> String {
@@ -543,16 +556,18 @@ private struct DueAheadChart: View {
     }
 
     var body: some View {
-        if dueAhead.values.allSatisfy({ $0 == 0 }) {
+        if days.allSatisfy({ $0.count == 0 }) {
             Text("Nothing scheduled yet. Study some cards and their reviews will show up here.")
                 .foregroundStyle(.secondary)
         } else {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .firstTextBaseline) {
-                    summary("\(total.formatted())", range == 7 ? "in the next week" : "in the next 30 days")
-                    summary("\(nextWeek.formatted())", "in the next 7 days").opacity(range == 7 ? 0 : 1)
+                    summary("\(total.formatted())", range == 7 ? "in the next 7 days" : "in the next 30 days")
+                    if range == 30 {
+                        summary("\(nextWeek.formatted())", "in the next 7 days")
+                    }
                     if let busiest, busiest.count > 0 {
-                        summary("\(busiest.count)", "on your busiest day, \(label(busiest.day))")
+                        summary("\(busiest.count.formatted())", "on your busiest day, \(label(busiest.day))")
                     }
                     Spacer()
                     Picker("Range", selection: $range) {
@@ -576,54 +591,72 @@ private struct DueAheadChart: View {
         .padding(.trailing, 18)
     }
 
+    private var hoveredDay: Int? { hovered.map(offset(of:)) }
+
     private var chart: some View {
         Chart {
             ForEach(days, id: \.day) { item in
-                BarMark(x: .value("Day", item.day), y: .value("Cards", item.count))
-                    // Today stands out; the rest are a lighter tint of the same colour.
-                    .foregroundStyle(item.day == 0 ? accent.color : accent.color.opacity(hovered == item.day ? 0.85 : 0.5))
+                // One bar per day, filling most of its slot with a small gap between.
+                BarMark(x: .value("Day", date(item.day), unit: .day),
+                        y: .value("Cards", item.count),
+                        width: .ratio(0.72))
+                    // Today in full colour; the days ahead a lighter tint, brighter under the pointer.
+                    .foregroundStyle(item.day == 0 ? accent.color
+                                     : accent.color.opacity(hoveredDay == item.day ? 0.8 : 0.45))
                     .clipShape(UnevenRoundedRectangle(topLeadingRadius: 4, topTrailingRadius: 4))
             }
             RuleMark(y: .value("Average", average))
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                .foregroundStyle(.secondary)
-                .annotation(position: .top, alignment: .trailing) {
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
+                .foregroundStyle(.secondary.opacity(0.6))
+                .annotation(position: .top, alignment: .trailing, spacing: 2) {
                     Text("about \(Int(average.rounded())) a day")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-            if let hovered, let item = days.first(where: { $0.day == hovered }) {
-                RuleMark(x: .value("Day", hovered))
+            if let day = hoveredDay, (0..<range).contains(day) {
+                RuleMark(x: .value("Day", date(day), unit: .day))
                     .foregroundStyle(.clear)
                     .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(label(item.day)).font(.caption.weight(.semibold))
-                            Text(item.count == 1 ? "1 card due" : "\(item.count) cards due").font(.caption)
-                        }
-                        .padding(8)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(.regularMaterial))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
+                        tooltip(day)
                     }
             }
         }
         .chartXSelection(value: $hovered)
         .chartXAxis {
-            AxisMarks(values: range == 7 ? Array(0...7) : [0, 7, 14, 21, 28]) { value in
+            AxisMarks(values: .stride(by: .day, count: range == 7 ? 1 : 7)) { value in
+                AxisTick(length: 3).foregroundStyle(.secondary.opacity(0.4))
                 AxisValueLabel {
-                    if let day = value.as(Int.self) {
-                        Text(day == 0 ? "Today" : date(day).formatted(range == 7 ? .dateTime.weekday(.abbreviated) : .dateTime.day().month(.abbreviated)))
+                    if let d = value.as(Date.self) {
+                        let o = offset(of: d)
+                        Text(o == 0 ? "Today"
+                             : d.formatted(range == 7 ? .dateTime.weekday(.abbreviated) : .dateTime.day().month(.abbreviated)))
                     }
                 }
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine().foregroundStyle(.secondary.opacity(0.15))
-                AxisValueLabel()
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { _ in
+                AxisGridLine().foregroundStyle(.secondary.opacity(0.12))
+                AxisValueLabel().foregroundStyle(.secondary)
             }
         }
-        .frame(height: 200)
+        .chartPlotStyle { $0.padding(.top, 6) }
+        .frame(height: 220)
         .animation(.snappy, value: range)
+    }
+
+    private func tooltip(_ day: Int) -> some View {
+        let n = count(day)
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(label(day)).font(.caption.weight(.semibold))
+            Text(n == 1 ? "1 card due" : "\(n.formatted()) cards due").font(.caption)
+            if day == 0, overdue > 0 {
+                Text("including \(overdue.formatted()) overdue").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 8).fill(.regularMaterial))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
     }
 }
 

@@ -177,3 +177,51 @@ struct UpdateAlerts: ViewModifier {
 extension View {
     func updateAlerts() -> some View { modifier(UpdateAlerts()) }
 }
+
+// MARK: - Dev build banner
+
+/// A red strip across the top of every window in Animus Dev (never in the real
+/// app), with this build's version and the last published one, so it's always
+/// clear which copy you're looking at.
+struct DevBuildBanner: View {
+    private static let info = Bundle.main.infoDictionary ?? [:]
+    static var isDevBuild: Bool { info["AnimusDevBuild"] as? Bool ?? false }
+
+    /// Which half of the app is running: Intel (on an Apple Silicon Mac, that
+    /// means through Rosetta) or Apple Silicon.
+    static var chip: String {
+        #if arch(x86_64)
+        var translated: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        let rosetta = sysctlbyname("sysctl.proc_translated", &translated, &size, nil, 0) == 0 && translated == 1
+        return rosetta ? "Intel (Rosetta)" : "Intel"
+        #else
+        return "Apple Silicon"
+        #endif
+    }
+
+    var body: some View {
+        if Self.isDevBuild {
+            let version = Self.info["CFBundleShortVersionString"] as? String ?? "?"
+            let build = Self.info["CFBundleVersion"] as? String ?? "?"
+            let previous = Self.info["AnimusPreviousVersion"] as? String
+            HStack(spacing: 8) {
+                Image(systemName: "hammer.fill")
+                Text("DEV BUILD").fontWeight(.heavy)
+                Text("·")
+                Text("This build \(version) (\(build))")
+                if let previous, !previous.isEmpty {
+                    Text("·")
+                    Text("Last release \(previous)")
+                }
+                Text("·")
+                Text(Self.chip)
+            }
+            .font(.caption)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background(Color(red: 0.86, green: 0.12, blue: 0.16))
+        }
+    }
+}

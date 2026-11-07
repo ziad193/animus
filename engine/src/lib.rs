@@ -916,7 +916,8 @@ unsafe fn stats_for(engine: *mut Engine, days: u32, search: String) -> *mut c_ch
         retention_month,
         due_ahead: graphs
             .future_due
-            .map(|f| f.future_due.into_iter().filter(|(d, _)| (0..=30).contains(d)).collect())
+            // Negative days are overdue cards; the app counts them as due today.
+            .map(|f| f.future_due.into_iter().filter(|(d, _)| *d <= 30).collect())
             .unwrap_or_default(),
         intervals: graphs.intervals.map(|i| i.intervals.into_iter().collect()).unwrap_or_default(),
         hours,

@@ -241,7 +241,7 @@ struct SetupView: View {
                               text: "Your cards download in the background. Pictures can take a few minutes the first time.")
                 }
                 Explainer(symbol: "questionmark.circle", color: .blue, title: "Need a reminder?",
-                          text: "Run this tour again any time from Preferences.")
+                          text: "Run this tour again any time from Settings.")
             }
         }
     }

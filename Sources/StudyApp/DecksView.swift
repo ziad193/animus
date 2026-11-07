@@ -98,8 +98,8 @@ struct DecksView: View {
                 deckActions.options = first
             }
         }
-        .onChange(of: deckActions.createdFiltered) { _, id in
-            if let id { select(.deck(id)); deckActions.createdFiltered = nil }
+        .onChange(of: deckActions.openDeck) { _, id in
+            if let id { select(.deck(id)); deckActions.openDeck = nil }
         }
         .onReceive(NotificationCenter.default.publisher(for: .iterumGoBack)) { _ in goBack() }
         .onReceive(NotificationCenter.default.publisher(for: .iterumGoForward)) { _ in goForward() }
@@ -349,11 +349,12 @@ private struct TodayPage: View {
     @AppStorage(AppBackground.key) private var background = AppBackground.none
     @AppStorage(BackgroundStyle.key) private var backgroundStyle = BackgroundStyle.banner
     @State private var backgroundStore = BackgroundStore.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     /// The picture sits behind the greeting and today's ring, as a banner.
     private var showsBanner: Bool {
         let _ = backgroundStore.generation
-        return backgroundStyle == .banner && background != .none && background.isReady
+        return backgroundStyle == .banner && background.isShowing
     }
 
     /// The greeting and today's ring: on the banner, or at the top of the page.
@@ -365,36 +366,37 @@ private struct TodayPage: View {
                         .font(.largeTitle.weight(.semibold))
                 }
                 .frostedOnPicture(cornerRadius: 14, padding: 10)
+                .bannerShadow()
                 Spacer()
                 ProfileButton()
-                    .frostedOnPicture(cornerRadius: 22, padding: 2)
+                    .frostedOnPicture(cornerRadius: 22, padding: 2, alsoOnBanner: true)
             }
 
             TodayProgress(left: Int(totals.learn + totals.review), newCards: Int(totals.new),
                           done: stats?.todayReviews ?? 0)
+                .bannerShadow()
         }
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-            if showsBanner {
-                header
+            // The greeting, today's ring and the buttons: the same layout with or
+            // without a background; on a picture the text turns white.
+                VStack(alignment: .leading, spacing: 26) {
+                    header
+                    quickActions
+                }
                     .padding(.horizontal, 36)
                     .padding(.top, 36)
                     .padding(.bottom, 30)
                     .frame(maxWidth: 1280, alignment: .leading)
                     .frame(maxWidth: .infinity)
-                    .background { BannerBackdrop(background: background) }
-                    // White text and a light ring on the picture, in light or dark mode,
-                    // with dark frosted glass behind the greeting and the ring.
-                    .environment(\.colorScheme, .dark)
-                    .environment(\.onPicture, true)
-            }
+                    // White text and a light ring straight on the picture, in light or dark mode.
+                    // (Either style: the banner, or the picture behind the whole window.)
+                    .environment(\.colorScheme, background.isShowing ? .dark : colorScheme)
+                    .environment(\.onBanner, background.isShowing)
             VStack(alignment: .leading, spacing: 26) {
-                if !showsBanner { header }
-
-                quickActions
 
                 ForEach(layout.order, id: \.self) { section in
                     if arranging {
@@ -417,18 +419,21 @@ private struct TodayPage: View {
                         Label(arranging ? "Done Arranging" : "Arrange Home", systemImage: arranging ? "checkmark" : "rectangle.3.group")
                     }
                     .tip("Change the order of the sections above, or hide ones you don't use")
+                    .frostedOnPicture(cornerRadius: 7)
                     Button {
                         openSettings()
                     } label: {
-                        Label("Preferences", systemImage: "gearshape")
+                        Label("Settings", systemImage: "gearshape")
                     }
                     .tip("Appearance, when your study day starts, the timer and more (⌘,)")
+                    .frostedOnPicture(cornerRadius: 7)
                     Button {
                         openWindow(id: HelpWindow.id)
                     } label: {
                         Label("Help", systemImage: "questionmark.circle")
                     }
                     .tip("A short guide to studying, adding cards, syncing and shortcuts (⌘?)")
+                    .frostedOnPicture(cornerRadius: 7)
                     Button {
                         Task { await sync.syncNow() }
                     } label: {
@@ -436,8 +441,8 @@ private struct TodayPage: View {
                             .lineLimit(1)
                     }
                     .tip(sync.isSignedIn ? "Sync now" : "Sign in to keep this Mac, Anki and your phone in step")
+                    .frostedOnPicture(cornerRadius: 7)
                     }
-                    .frostedOnPicture(cornerRadius: 14, padding: 8)
                     Spacer()
                 }
                 .controlSize(.large)
@@ -446,6 +451,15 @@ private struct TodayPage: View {
             .padding(36)
             .frame(maxWidth: 1280, alignment: .leading)
             .frame(maxWidth: .infinity)
+            // Below the greeting, each block keeps frosted glass over the picture
+            // (in either style: as a banner on Home, or behind the whole window).
+            .environment(\.onPicture, background.isShowing)
+            }
+        }
+        // The picture fills the whole of Home, behind everything.
+        .background {
+            if showsBanner {
+                BannerBackdrop(background: background).ignoresSafeArea()
             }
         }
         .screenBackground()
@@ -559,6 +573,7 @@ private struct ActionButton: View {
     let action: () -> Void
     @State private var hovering = false
     @Environment(\.onPicture) private var onPicture
+    @Environment(\.onBanner) private var onBanner
 
     var body: some View {
         Button(action: action) {
@@ -576,7 +591,7 @@ private struct ActionButton: View {
             .frame(minWidth: FlowRow<EmptyView>.itemWidth, maxWidth: .infinity, minHeight: 46, maxHeight: 46)
             .background(RoundedRectangle(cornerRadius: 12)
                 .fill(prominent ? AnyShapeStyle(accent.color.gradient)
-                      : onPicture ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color.primary.opacity(0.05))))
+                      : (onPicture || onBanner) ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color.primary.opacity(0.05))))
             .overlay(RoundedRectangle(cornerRadius: 12)
                 .fill(Color.primary.opacity(hovering && !prominent ? 0.05 : 0)))
             .overlay(RoundedRectangle(cornerRadius: 12)
@@ -628,6 +643,7 @@ private struct TrailingIconLabel: LabelStyle {
 /// with the number left in the middle and what you've done beside it.
 private struct TodayProgress: View {
     @Environment(StudyClock.self) private var clock
+    @Environment(\.onBanner) private var onBanner
     @AppStorage(Pref.accent) private var accent = AccentChoice.blue
     /// Reviews (and cards you're learning) still waiting today, across all decks.
     let left: Int
@@ -643,51 +659,56 @@ private struct TodayProgress: View {
 
     var body: some View {
         let _ = clock.revision
-        HStack(spacing: 24) {
-            ZStack {
-                Circle()
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 14)
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(left == 0 ? Color.green.gradient : accent.color.gradient,
-                            style: StrokeStyle(lineWidth: 14, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.spring(duration: 0.8), value: progress)
-                VStack(spacing: 0) {
-                    if left == 0 {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 34, weight: .bold))
-                            .foregroundStyle(.green)
-                    } else {
-                        Text("\(left)")
-                            .font(.system(size: 34, weight: .bold, design: .rounded).monospacedDigit())
-                            .contentTransition(.numericText())
-                            .minimumScaleFactor(0.6)
-                        Text("to go").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                    }
-                }
-                .padding(18)
-            }
-            .frame(width: 118, height: 118)
-
-            VStack(alignment: .leading, spacing: 6) {
+        // The ring in the middle, the words under it, no box.
+        VStack(spacing: 14) {
+            ring
+            VStack(spacing: 6) {
                 Text(headline)
                     .font(.title2.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 16) {
-                    Label(done == 1 ? "1 card studied" : "\(done) cards studied", systemImage: "checkmark.circle")
-                    Label("\(StudyClock.format(clock.todaySeconds)) today", systemImage: "stopwatch")
-                        .tip("This week: \(StudyClock.format(clock.weekSeconds)). The timer pauses on breaks, when you switch apps, or after 3 idle minutes.")
-                }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
+                    .multilineTextAlignment(.center)
+                details
             }
-            Spacer(minLength: 0)
         }
-        .padding(20)
-        .background(BlockFill(cornerRadius: 18, plain: AnyShapeStyle(Color.primary.opacity(0.04))))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.separator.opacity(0.5)))
+        .frame(maxWidth: .infinity)
+    }
+
+    private var ring: some View {
+        ZStack {
+            Circle()
+                .stroke(onBanner ? Color.white.opacity(0.3) : Color.primary.opacity(0.08), lineWidth: 14)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(left == 0 ? Color.green.gradient : accent.color.gradient,
+                        style: StrokeStyle(lineWidth: 14, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.spring(duration: 0.8), value: progress)
+            VStack(spacing: 0) {
+                if left == 0 {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(.green)
+                } else {
+                    Text("\(left)")
+                        .font(.system(size: 34, weight: .bold, design: .rounded).monospacedDigit())
+                        .contentTransition(.numericText())
+                        .minimumScaleFactor(0.6)
+                    Text("to go").font(.caption.weight(.medium))
+                        .foregroundStyle(onBanner ? AnyShapeStyle(Color.white.opacity(0.9)) : AnyShapeStyle(.secondary))
+                }
+            }
+            .padding(18)
+        }
+        .frame(width: 118, height: 118)
+    }
+
+    private var details: some View {
+        HStack(spacing: 16) {
+            Label(done == 1 ? "1 card studied" : "\(done) cards studied", systemImage: "checkmark.circle")
+            Label("\(StudyClock.format(clock.todaySeconds)) today", systemImage: "stopwatch")
+                .tip("This week: \(StudyClock.format(clock.weekSeconds)). The timer pauses on breaks, when you switch apps, or after 3 idle minutes.")
+        }
+        .font(.callout)
+        .foregroundStyle(onBanner ? AnyShapeStyle(Color.white.opacity(0.9)) : AnyShapeStyle(.secondary))
     }
 
     private var headline: String {
@@ -1035,7 +1056,7 @@ extension Deck {
 /// The frosted background macOS uses behind sidebars.
 private struct SidebarMaterial: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
+        let view = ToolbarBackdrop.PassThroughEffectView()
         view.material = .sidebar
         view.blendingMode = .behindWindow
         view.state = .followsWindowActiveState

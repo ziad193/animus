@@ -103,6 +103,9 @@ enum AppBackground: String, CaseIterable, Identifiable {
         !isPicture || FileManager.default.fileExists(atPath: fileURL.path)
     }
 
+    /// Something to draw: a colour wash, or a picture that's been downloaded.
+    @MainActor var isShowing: Bool { self != .none && isReady }
+
     /// Offered in the picker (a bare `swift run` has no thumbnails).
     @MainActor var isOffered: Bool { !isPicture || image(thumbnail: true) != nil }
 }
@@ -201,11 +204,16 @@ struct BannerBackdrop: View {
 
     var body: some View {
         BackgroundFill(background: background)
-            .overlay(LinearGradient(colors: [.black.opacity(0.3), .black.opacity(0.6)],
+            // A little darker overall, and most at the top where the greeting
+            // and today's count sit, so white text reads on any picture.
+            .overlay(LinearGradient(colors: [.black.opacity(0.5), .black.opacity(0.2)],
                                     startPoint: .top, endPoint: .bottom))
             .clipped()
             // White text and a light ring on the picture, in light or dark mode.
             .environment(\.colorScheme, .dark)
+            // Only ever a backdrop: it reaches up behind the tabs and toolbar,
+            // so it must never take clicks meant for them.
+            .allowsHitTesting(false)
     }
 }
 
@@ -239,6 +247,8 @@ struct BackgroundFill: View {
             }
         }
         .accessibilityHidden(true)
+        // A backdrop only: clicks always go to whatever is on top of it.
+        .allowsHitTesting(false)
     }
 }
 
@@ -279,10 +289,17 @@ private struct Wash: View {
 /// True for views drawn over a background picture or wash, so blocks can put
 /// frosted glass behind themselves (and only themselves) to stay readable.
 private struct OnPictureKey: EnvironmentKey { static let defaultValue = false }
+/// True for views on Home's picture banner: text sits straight on the
+/// picture with a soft shadow, rather than on glass.
+private struct OnBannerKey: EnvironmentKey { static let defaultValue = false }
 extension EnvironmentValues {
     var onPicture: Bool {
         get { self[OnPictureKey.self] }
         set { self[OnPictureKey.self] = newValue }
+    }
+    var onBanner: Bool {
+        get { self[OnBannerKey.self] }
+        set { self[OnBannerKey.self] = newValue }
     }
 }
 
@@ -295,9 +312,20 @@ extension View {
     }
 
     /// Frosted glass behind this block, only while a background shows.
-    func frostedOnPicture(cornerRadius: CGFloat = 16, padding: CGFloat = 0) -> some View {
-        modifier(FrostedOnPicture(cornerRadius: cornerRadius, padding: padding))
+    /// `alsoOnBanner` keeps the glass on Home's banner too (the profile bubble).
+    func frostedOnPicture(cornerRadius: CGFloat = 16, padding: CGFloat = 0, alsoOnBanner: Bool = false) -> some View {
+        modifier(FrostedOnPicture(cornerRadius: cornerRadius, padding: padding, alsoOnBanner: alsoOnBanner))
     }
+
+    /// The background picture behind a whole page, like Home's, with each
+    /// block on frosted glass. `blur` softens it (Add Cards, for focus).
+    /// With no background, the page keeps its `plain` fill.
+    func pageBackground(blur: CGFloat = 0, plain: some ShapeStyle = Color.clear) -> some View {
+        modifier(PageBackground(blur: blur, plain: AnyShapeStyle(plain)))
+    }
+
+    /// A soft dark shadow so white text stays readable on the banner picture.
+    func bannerShadow() -> some View { modifier(BannerShadow()) }
 }
 
 /// A block's own fill: frosted glass over a background, or `plain` without one.
@@ -312,13 +340,52 @@ struct BlockFill: View {
     }
 }
 
+private struct PageBackground: ViewModifier {
+    let blur: CGFloat
+    let plain: AnyShapeStyle
+    @AppStorage(AppBackground.key) private var background = AppBackground.none
+    @State private var store = BackgroundStore.shared
+
+    func body(content: Content) -> some View {
+        let _ = store.generation
+        if !background.isShowing {
+            content.background(plain)
+        } else {
+            content
+                // Light text on the darkened picture, and glass behind each block.
+                .environment(\.colorScheme, .dark)
+                .environment(\.onPicture, true)
+                .background {
+                    BannerBackdrop(background: background)
+                        .blur(radius: blur, opaque: true)
+                        .ignoresSafeArea()
+                }
+        }
+    }
+}
+
+private struct BannerShadow: ViewModifier {
+    @Environment(\.onBanner) private var onBanner
+    func body(content: Content) -> some View {
+        if onBanner {
+            content
+                .shadow(color: .black.opacity(0.7), radius: 1.5, y: 1)
+                .shadow(color: .black.opacity(0.6), radius: 10)
+        } else {
+            content
+        }
+    }
+}
+
 private struct FrostedOnPicture: ViewModifier {
     let cornerRadius: CGFloat
     let padding: CGFloat
+    var alsoOnBanner = false
     @Environment(\.onPicture) private var onPicture
+    @Environment(\.onBanner) private var onBanner
 
     func body(content: Content) -> some View {
-        if onPicture {
+        if onPicture || (alsoOnBanner && onBanner) {
             content
                 .padding(padding)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -340,7 +407,7 @@ private struct ScreenBackground: ViewModifier {
     func body(content: Content) -> some View {
         let _ = store.generation
         // The banner style draws its picture on Home itself; screens stay plain.
-        if background == .none || !background.isReady || style == .banner {
+        if !background.isShowing || style == .banner {
             content.background(plain)
         } else {
             content
@@ -445,6 +512,9 @@ struct BackgroundPicker: View {
                         .lineLimit(1)
                         .frame(width: 104)
                 }
+                // The whole tile is clickable, including the preview (which,
+                // for the colour washes, otherwise ignores clicks like every backdrop).
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(downloading)

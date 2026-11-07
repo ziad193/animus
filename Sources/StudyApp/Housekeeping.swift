@@ -4,10 +4,29 @@ import StudyCore
 
 // MARK: - New deck
 
+extension Deck {
+    /// The deck already using this full name ("Parent::Child"), if any. Anki
+    /// treats names that differ only in capitals as the same deck.
+    static func named(_ fullName: String, in decks: [Deck]) -> Deck? {
+        let wanted = fullName.trimmingCharacters(in: .whitespaces)
+        guard !wanted.isEmpty else { return nil }
+        return flatten(decks).first { $0.name.caseInsensitiveCompare(wanted) == .orderedSame }
+    }
+
+    /// Anki keeps a built-in deck called "Default" and hides it while it's
+    /// empty, so it isn't in the list but the name is still taken.
+    static func isHiddenDefault(_ fullName: String, in decks: [Deck]) -> Bool {
+        fullName.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare("Default") == .orderedSame
+            && named(fullName, in: decks) == nil
+    }
+}
+
 struct NewDeckSheet: View {
     @Environment(Library.self) private var library
     @Environment(\.dismiss) private var dismiss
     let decks: [Deck]
+    /// Opens a deck that already exists (when the name you typed is taken).
+    var openExisting: ((Int64) -> Void)?
     @State private var name = ""
     @State private var parentID: Int64?
     @State private var error: String?
@@ -27,7 +46,27 @@ struct NewDeckSheet: View {
                 Text("Put it inside another deck to make it a section, e.g. a week of a module.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if let error { Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
+            if let existing {
+                HStack(alignment: .firstTextBaseline) {
+                    Label("You already have a deck called “\(existing.displayPath)”.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    if let openExisting {
+                        Button("Open It") {
+                            openExisting(existing.id)
+                            dismiss()
+                        }
+                    }
+                }
+            } else if reservedName {
+                Label("“Default” is the name of Anki's built-in deck. Pick another name.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
@@ -35,7 +74,7 @@ struct NewDeckSheet: View {
                     .buttonStyle(.borderedProminent)
                     .hoverGlow()
                     .keyboardShortcut(.defaultAction)
-                    .disabled(cleanName.isEmpty || name.contains("::"))
+                    .disabled(cleanName.isEmpty || name.contains("::") || existing != nil || reservedName)
             }
         }
         .padding(24)
@@ -44,10 +83,20 @@ struct NewDeckSheet: View {
 
     private var cleanName: String { name.trimmingCharacters(in: .whitespaces) }
 
-    private func save() async {
-        guard let engine = library.engine, !cleanName.isEmpty else { return }
+    /// The name it would get, including the deck it's inside.
+    private var fullName: String {
         let parent = parentID.flatMap { Deck.find($0, in: decks) }
-        let full = parent.map { $0.name + "::" + cleanName } ?? cleanName
+        return parent.map { $0.name + "::" + cleanName } ?? cleanName
+    }
+
+    /// A deck that already has that name (Anki would quietly reuse it).
+    private var existing: Deck? { cleanName.isEmpty ? nil : Deck.named(fullName, in: decks) }
+
+    private var reservedName: Bool { Deck.isHiddenDefault(fullName, in: decks) }
+
+    private func save() async {
+        guard let engine = library.engine, !cleanName.isEmpty, existing == nil, !reservedName else { return }
+        let full = fullName
         do {
             _ = try await engine.addDeck(named: full)
             await library.refresh()

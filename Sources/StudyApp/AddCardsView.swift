@@ -111,11 +111,12 @@ struct AddCardsView: View {
             }
             .padding(28)
         }
-        .background(.background.secondary)
+        // The background picture, blurred so the fields stay the focus.
+        .pageBackground(blur: 28, plain: .background.secondary)
     }
 
     /// A slim, always-there reminder that you can keep slides beside the card
-    /// (switched off in Preferences → General).
+    /// (switched off in Settings → General).
     private var slidesTip: some View {
         HStack(spacing: 8) {
             Image(systemName: "doc.richtext")

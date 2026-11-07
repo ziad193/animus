@@ -371,7 +371,7 @@ struct CardTypesView: View {
     private func stylingTab(_ current: NoteTypeSpec) -> some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("How every card of this type looks (CSS). Shown when Preferences › Card style is “Deck's own”.")
+                Text("How every card of this type looks (CSS). Shown when Settings › Card style is “Deck's own”.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 templateBox("Styling", binding(\.css))
             }

@@ -229,10 +229,15 @@ private struct MiniWindow: View {
     }
 }
 
-/// The Preferences window (⌘, or the Preferences button on Home).
+/// The Settings window (⌘, or the Settings button on Home).
 struct SettingsView: View {
     var body: some View {
         TabView {
+            Tab {
+                AnimusSettings()
+            } label: {
+                Label { Text("Animus") } icon: { Image(nsImage: AnimusGlyph.tabImage) }
+            }
             Tab("General", systemImage: "paintbrush") { GeneralPreferences() }
             Tab("Studying", systemImage: "graduationcap") { StudyingPreferences() }
             Tab("Sync", systemImage: "arrow.triangle.2.circlepath") { SyncPreferences() }

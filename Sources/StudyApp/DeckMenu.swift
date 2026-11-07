@@ -18,8 +18,9 @@ final class DeckActions {
     var creatingDeck = false
     /// The filtered-deck sheet (with the deck to borrow from, or none for all decks).
     var filtering: FilterSource?
-    /// A filtered deck just made, to open straight away.
-    var createdFiltered: Int64?
+    /// A deck to open straight away: a filtered deck just made, or the existing
+    /// deck picked from New Deck when its name was already taken.
+    var openDeck: Int64?
 
     struct FilterSource: Identifiable {
         let id = UUID()
@@ -108,7 +109,7 @@ struct DeckActionPresenter: ViewModifier {
                 StudyMoreSheet(deck: deck)
             }
             .sheet(isPresented: $actions.creatingDeck) {
-                NewDeckSheet(decks: decks)
+                NewDeckSheet(decks: decks) { actions.openDeck = $0 }
             }
             .sheet(item: Binding(get: { library.csvImport }, set: { library.csvImport = $0 })) { file in
                 CSVImportSheet(file: file.url, decks: decks)
@@ -117,7 +118,7 @@ struct DeckActionPresenter: ViewModifier {
                 ExportDeckSheet(deck: deck)
             }
             .sheet(item: $actions.filtering) { source in
-                FilteredDeckSheet(startDeck: source.deck) { id in actions.createdFiltered = id }
+                FilteredDeckSheet(startDeck: source.deck) { id in actions.openDeck = id }
             }
             .confirmationDialog(deleteTitle, isPresented: Binding(get: { actions.deleting != nil },
                                                                   set: { if !$0 { actions.deleting = nil } }),
@@ -203,7 +204,16 @@ private struct RenameDeckSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if let error {
+            if let taken {
+                Label("There's already a deck called “\(taken.displayPath)”. Pick another name.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if reservedName {
+                Label("“Default” is the name of Anki's built-in deck. Pick another name.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else if let error {
                 Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             }
             HStack {
@@ -214,7 +224,7 @@ private struct RenameDeckSheet: View {
                     .buttonStyle(.borderedProminent)
                     .hoverGlow()
                     .keyboardShortcut(.defaultAction)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || name.contains("::"))
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || name.contains("::") || taken != nil || reservedName)
             }
         }
         .padding(24)
@@ -226,11 +236,24 @@ private struct RenameDeckSheet: View {
         }
     }
 
-    private func save() async {
-        guard let engine = library.engine else { return }
+    /// The name it would end up with, including the deck it's inside.
+    private var fullName: String {
         let short = name.trimmingCharacters(in: .whitespaces)
         let parent = parentID.flatMap { Deck.find($0, in: decks) }
-        let full = parent.map { $0.name + "::" + short } ?? short
+        return parent.map { $0.name + "::" + short } ?? short
+    }
+
+    /// Another deck already using that name (Anki would quietly add a "+").
+    private var taken: Deck? {
+        guard let other = Deck.named(fullName, in: decks), other.id != deck.id else { return nil }
+        return other
+    }
+
+    private var reservedName: Bool { Deck.isHiddenDefault(fullName, in: decks) }
+
+    private func save() async {
+        guard let engine = library.engine, taken == nil, !reservedName else { return }
+        let full = fullName
         do {
             try await engine.renameDeck(deck.id, to: full)
             await library.refresh()

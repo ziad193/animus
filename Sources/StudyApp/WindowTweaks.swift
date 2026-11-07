@@ -72,9 +72,14 @@ struct ToolbarBackdrop: View {
         .allowsHitTesting(false)
     }
 
+    /// Frosted glass that never takes the mouse (the toolbar's buttons sit on it).
+    final class PassThroughEffectView: NSVisualEffectView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
     private struct TitlebarMaterial: NSViewRepresentable {
         func makeNSView(context: Context) -> NSVisualEffectView {
-            let view = NSVisualEffectView()
+            let view = PassThroughEffectView()
             view.material = .titlebar
             view.blendingMode = .withinWindow
             view.state = .followsWindowActiveState
