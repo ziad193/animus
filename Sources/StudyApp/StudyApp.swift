@@ -31,6 +31,9 @@ struct StudyAppMain: App {
                 .environment(\.deleteCurrentProfile, deleteCurrentProfile)
         }
         .defaultSize(width: 1100, height: 720)
+        // Always open the main window at launch, even if Animus was last quit
+        // with no window open (otherwise you'd see only the menu bar).
+        .defaultLaunchBehavior(.presented)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
         .commands {
@@ -74,6 +77,8 @@ struct StudyAppMain: App {
                 .profileScope(session, profiles: profiles, switchProfile: switchProfile)
         }
         .defaultSize(width: 860, height: 600)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
 
         Settings {
             SettingsView()

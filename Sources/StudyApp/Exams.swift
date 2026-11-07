@@ -111,7 +111,7 @@ struct ExamCountdowns: View {
             }
         }
         .padding(20)
-        .background(RoundedRectangle(cornerRadius: 16).fill(.background))
+        .background(BlockFill(cornerRadius: 16, plain: AnyShapeStyle(.background)))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator.opacity(0.5)))
         .sheet(item: $editing) { exam in
             ExamEditor(exam: exam, decks: decks, isNew: !store.exams.contains { $0.id == exam.id })

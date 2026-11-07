@@ -346,21 +346,51 @@ private struct TodayPage: View {
         return deck
     }
 
+    @AppStorage(AppBackground.key) private var background = AppBackground.none
+    @AppStorage(BackgroundStyle.key) private var backgroundStyle = BackgroundStyle.banner
+    @State private var backgroundStore = BackgroundStore.shared
+
+    /// The picture sits behind the greeting and today's ring, as a banner.
+    private var showsBanner: Bool {
+        let _ = backgroundStore.generation
+        return backgroundStyle == .banner && background != .none && background.isReady
+    }
+
+    /// The greeting and today's ring: on the banner, or at the top of the page.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 26) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("\(greeting), \(profiles.active.name)")
+                        .font(.largeTitle.weight(.semibold))
+                }
+                .frostedOnPicture(cornerRadius: 14, padding: 10)
+                Spacer()
+                ProfileButton()
+                    .frostedOnPicture(cornerRadius: 22, padding: 2)
+            }
+
+            TodayProgress(left: Int(totals.learn + totals.review), newCards: Int(totals.new),
+                          done: stats?.todayReviews ?? 0)
+        }
+    }
+
     var body: some View {
         ScrollView {
+            VStack(spacing: 0) {
+            if showsBanner {
+                header
+                    .padding(.horizontal, 36)
+                    .padding(.top, 36)
+                    .padding(.bottom, 30)
+                    .frame(maxWidth: 1280, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                    .background { BannerBackdrop(background: background) }
+                    // White text and a light ring on the picture, in light or dark mode.
+                    .environment(\.colorScheme, .dark)
+            }
             VStack(alignment: .leading, spacing: 26) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("\(greeting), \(profiles.active.name)")
-                            .font(.largeTitle.weight(.semibold))
-                    }
-                    Spacer()
-                    ProfileButton()
-                }
-
-                // Four tiles the same size; they wrap onto two rows in a narrow window.
-                TodayProgress(left: Int(totals.learn + totals.review), newCards: Int(totals.new),
-                              done: stats?.todayReviews ?? 0)
+                if !showsBanner { header }
 
                 quickActions
 
@@ -378,6 +408,7 @@ private struct TodayPage: View {
                 // Page controls, at the bottom so they don't crowd the top.
                 HStack(spacing: 10) {
                     Spacer()
+                    HStack(spacing: 10) {
                     Button {
                         arranging.toggle()
                     } label: {
@@ -403,6 +434,8 @@ private struct TodayPage: View {
                             .lineLimit(1)
                     }
                     .tip(sync.isSignedIn ? "Sync now" : "Sign in to keep this Mac, Anki and your phone in step")
+                    }
+                    .frostedOnPicture(cornerRadius: 14, padding: 8)
                     Spacer()
                 }
                 .controlSize(.large)
@@ -411,6 +444,7 @@ private struct TodayPage: View {
             .padding(36)
             .frame(maxWidth: 1280, alignment: .leading)
             .frame(maxWidth: .infinity)
+            }
         }
         .screenBackground()
         .task(id: decks.map(\.dueToday)) {
@@ -480,6 +514,7 @@ private struct TodayPage: View {
                 TileGrid(title: "Your decks", decks: decks, open: open) {
                     deckActions.creatingDeck = true
                 }
+                .frostedOnPicture(cornerRadius: 18, padding: 16)
             }
         }
     }
@@ -521,6 +556,7 @@ private struct ActionButton: View {
     let help: String
     let action: () -> Void
     @State private var hovering = false
+    @Environment(\.onPicture) private var onPicture
 
     var body: some View {
         Button(action: action) {
@@ -537,7 +573,8 @@ private struct ActionButton: View {
             .padding(.horizontal, 14)
             .frame(minWidth: FlowRow<EmptyView>.itemWidth, maxWidth: .infinity, minHeight: 46, maxHeight: 46)
             .background(RoundedRectangle(cornerRadius: 12)
-                .fill(prominent ? AnyShapeStyle(accent.color.gradient) : AnyShapeStyle(Color.primary.opacity(0.05))))
+                .fill(prominent ? AnyShapeStyle(accent.color.gradient)
+                      : onPicture ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color.primary.opacity(0.05))))
             .overlay(RoundedRectangle(cornerRadius: 12)
                 .fill(Color.primary.opacity(hovering && !prominent ? 0.05 : 0)))
             .overlay(RoundedRectangle(cornerRadius: 12)
@@ -574,7 +611,7 @@ private struct HomePanel<Content: View>: View {
             content
         }
         .padding(20)
-        .background(RoundedRectangle(cornerRadius: 16).fill(.background))
+        .background(BlockFill(cornerRadius: 16, plain: AnyShapeStyle(.background)))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator.opacity(0.5)))
     }
 }
@@ -647,7 +684,7 @@ private struct TodayProgress: View {
             Spacer(minLength: 0)
         }
         .padding(20)
-        .background(RoundedRectangle(cornerRadius: 18).fill(Color.primary.opacity(0.04)))
+        .background(BlockFill(cornerRadius: 18, plain: AnyShapeStyle(Color.primary.opacity(0.04))))
         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.separator.opacity(0.5)))
     }
 

@@ -177,6 +177,38 @@ final class BackgroundStore {
     }
 }
 
+/// How the picture is shown.
+enum BackgroundStyle: String, CaseIterable, Identifiable {
+    /// A banner behind the greeting and today's ring on Home; the rest plain.
+    case banner
+    /// Behind everything on Home and while studying, with frosted blocks.
+    case window
+
+    static let key = "background.style"
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .banner: "Banner on Home"
+        case .window: "Whole window"
+        }
+    }
+}
+
+/// The banner behind Home's greeting: the picture with a dark wash over it,
+/// so the white text on top is easy to read. A clean edge at the bottom.
+struct BannerBackdrop: View {
+    let background: AppBackground
+
+    var body: some View {
+        BackgroundFill(background: background)
+            .overlay(LinearGradient(colors: [.black.opacity(0.25), .black.opacity(0.55)],
+                                    startPoint: .top, endPoint: .bottom))
+            .clipped()
+            // White text and a light ring on the picture, in light or dark mode.
+            .environment(\.colorScheme, .dark)
+    }
+}
+
 /// Fills its space with the chosen background.
 struct BackgroundFill: View {
     let background: AppBackground
@@ -244,32 +276,75 @@ private struct Wash: View {
     }
 }
 
+/// True for views drawn over a background picture or wash, so blocks can put
+/// frosted glass behind themselves (and only themselves) to stay readable.
+private struct OnPictureKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    var onPicture: Bool {
+        get { self[OnPictureKey.self] }
+        set { self[OnPictureKey.self] = newValue }
+    }
+}
+
 extension View {
-    /// Puts the chosen background behind a screen, with the screen's content
-    /// on frosted glass so text stays easy to read. With no background, the
-    /// screen looks as it always did.
-    func screenBackground(plain: some ShapeStyle = Color.clear, inset: CGFloat = 20) -> some View {
-        modifier(ScreenBackground(plain: AnyShapeStyle(plain), inset: inset))
+    /// Puts the chosen background behind a screen, at full strength. Each block
+    /// on the screen frosts its own patch (see `frostedOnPicture`), so the
+    /// picture shows in every gap. With no background, nothing changes.
+    func screenBackground(plain: some ShapeStyle = Color.clear) -> some View {
+        modifier(ScreenBackground(plain: AnyShapeStyle(plain)))
+    }
+
+    /// Frosted glass behind this block, only while a background shows.
+    func frostedOnPicture(cornerRadius: CGFloat = 16, padding: CGFloat = 0) -> some View {
+        modifier(FrostedOnPicture(cornerRadius: cornerRadius, padding: padding))
+    }
+}
+
+/// A block's own fill: frosted glass over a background, or `plain` without one.
+struct BlockFill: View {
+    var cornerRadius: CGFloat
+    var plain: AnyShapeStyle
+    @Environment(\.onPicture) private var onPicture
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(onPicture ? AnyShapeStyle(.regularMaterial) : plain)
+    }
+}
+
+private struct FrostedOnPicture: ViewModifier {
+    let cornerRadius: CGFloat
+    let padding: CGFloat
+    @Environment(\.onPicture) private var onPicture
+
+    func body(content: Content) -> some View {
+        if onPicture {
+            content
+                .padding(padding)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(.white.opacity(0.14)))
+                .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        } else {
+            content
+        }
     }
 }
 
 private struct ScreenBackground: ViewModifier {
     let plain: AnyShapeStyle
-    let inset: CGFloat
     @AppStorage(AppBackground.key) private var background = AppBackground.none
+    @AppStorage(BackgroundStyle.key) private var style = BackgroundStyle.banner
     @State private var store = BackgroundStore.shared
 
     func body(content: Content) -> some View {
         let _ = store.generation
-        if background == .none || !background.isReady {
+        // The banner style draws its picture on Home itself; screens stay plain.
+        if background == .none || !background.isReady || style == .banner {
             content.background(plain)
         } else {
             content
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(.white.opacity(0.18)))
-                .shadow(color: .black.opacity(0.18), radius: 24, y: 8)
-                .padding(inset)
+                .environment(\.onPicture, true)
                 .background { BackgroundFill(background: background).ignoresSafeArea() }
         }
     }
@@ -280,6 +355,7 @@ private struct ScreenBackground: ViewModifier {
 /// Settings › General › Background.
 struct BackgroundPicker: View {
     @AppStorage(AppBackground.key) private var background = AppBackground.none
+    @AppStorage(BackgroundStyle.key) private var style = BackgroundStyle.banner
     @State private var store = BackgroundStore.shared
     @State private var confirmingRemove = false
 
@@ -289,7 +365,15 @@ struct BackgroundPicker: View {
         let _ = store.generation
         VStack(alignment: .leading, spacing: 8) {
             Text("Background").font(.headline)
-            Text("Shown behind Home and while you study. Each picture downloads the first time you pick it.")
+            Picker("Show it", selection: $style) {
+                ForEach(BackgroundStyle.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 300)
+            Text(style == .banner
+                 ? "A banner across the top of Home. Each picture downloads the first time you pick it."
+                 : "Behind Home and while you study. Each picture downloads the first time you pick it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {

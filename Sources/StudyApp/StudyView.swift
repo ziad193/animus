@@ -155,16 +155,24 @@ struct StudyView: View {
 
     private var studyColumn: some View {
         VStack(spacing: 0) {
-            header
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
+            VStack(spacing: 0) {
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                    .padding(.bottom, 4)
 
-            if let card = session.card {
-                CardActionBar(session: session, card: card)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 6)
+                if let card = session.card {
+                    CardActionBar(session: session, card: card)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 6)
+                }
             }
+            // Over a background: one frosted strip for the buttons, the card
+            // floating on the picture below it.
+            .frostedOnPicture(cornerRadius: 14)
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
 
             content
                 .frame(maxWidth: 860, maxHeight: .infinity)
@@ -172,13 +180,14 @@ struct StudyView: View {
 
             if session.card != nil {
                 controls
+                    .frostedOnPicture(cornerRadius: 14, padding: 8)
                     .padding(.horizontal, 24)
                     .padding(.top, 12)
                     .padding(.bottom, 18)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .screenBackground(plain: .background.secondary, inset: 16)
+        .screenBackground(plain: .background.secondary)
     }
 
     @AppStorage(Pref.studyShowDecks) private var studyShowDecks = false
