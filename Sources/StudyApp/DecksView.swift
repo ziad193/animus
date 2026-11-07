@@ -353,6 +353,7 @@ private struct TodayPage: View {
                         ArrangeFrame(section: section, layout: layout,
                                      moveUp: { move(section, by: -1) }, moveDown: { move(section, by: 1) },
                                      toggle: { toggleHidden(section) }) { EmptyView() }
+                            .homeDragging(section, onDrop: drop)
                     } else if !layout.hidden.contains(section) {
                         content(for: section)
                     }
@@ -408,6 +409,18 @@ private struct TodayPage: View {
         guard l.order.indices.contains(j) else { return }
         withAnimation(.snappy) {
             l.order.swapAt(i, j)
+            layoutText = l.text
+        }
+    }
+
+    /// A section dragged onto another takes its place (the rest shift along).
+    private func drop(_ dragged: HomeSection, onto target: HomeSection) {
+        var l = layout
+        guard dragged != target, let from = l.order.firstIndex(of: dragged),
+              let to = l.order.firstIndex(of: target) else { return }
+        withAnimation(.snappy) {
+            l.order.remove(at: from)
+            l.order.insert(dragged, at: to)
             layoutText = l.text
         }
     }
@@ -1044,6 +1057,45 @@ struct HomeLayout {
     }
 }
 
+/// While arranging Home, a section can be picked up (by its handle or anywhere
+/// on it) and dropped on another section to take its place.
+private struct HomeDragging: ViewModifier {
+    let section: HomeSection
+    let onDrop: (HomeSection, HomeSection) -> Void
+    @State private var targeted = false
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .draggable(section.rawValue) {
+                Label(section.title, systemImage: "line.3.horizontal")
+                    .font(.headline)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            }
+            .dropDestination(for: String.self) { items, _ in
+                guard let raw = items.first, let dragged = HomeSection(rawValue: raw) else { return false }
+                onDrop(dragged, section)
+                return true
+            } isTargeted: { targeted = $0 }
+            // Where it will land.
+            .overlay {
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(Color.accentColor, lineWidth: 2.5)
+                    .opacity(targeted ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
+            .animation(.easeOut(duration: 0.12), value: targeted)
+    }
+}
+
+private extension View {
+    func homeDragging(_ section: HomeSection, onDrop: @escaping (HomeSection, HomeSection) -> Void) -> some View {
+        modifier(HomeDragging(section: section, onDrop: onDrop))
+    }
+}
+
 /// Wraps a Home section while arranging: a bar with up / down and show / hide.
 private struct ArrangeFrame<Content: View>: View {
     let section: HomeSection
@@ -1058,7 +1110,13 @@ private struct ArrangeFrame<Content: View>: View {
         let index = layout.order.firstIndex(of: section) ?? 0
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "line.3.horizontal").foregroundStyle(.secondary)
+                // Drag handle: pick the section up here (or anywhere on it) and drop it on another.
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 26, height: 26)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.08)))
+                    .tip("Drag to move “\(section.title)”")
                 Text(section.title).font(.headline)
                 if isHidden {
                     Text("Hidden").font(.caption).foregroundStyle(.secondary)

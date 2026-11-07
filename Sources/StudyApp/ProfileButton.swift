@@ -39,7 +39,10 @@ private struct ProfileList: View {
     @State private var adding = false
     @State private var renaming: Profile?
     @State private var deleting: Profile?
+    /// The second warning, for the profile you're using right now.
+    @State private var deletingCurrent: Profile?
     @State private var newName = ""
+    @Environment(\.deleteCurrentProfile) private var deleteCurrentProfile
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -66,14 +69,11 @@ private struct ProfileList: View {
                     Button { newName = profile.name; renaming = profile } label: { Image(systemName: "pencil") }
                         .buttonStyle(.hoverable)
                         .tip("Rename")
-                    if profiles.profiles.count > 1 {
-                        Button { deleting = profile } label: { Image(systemName: "trash") }
-                            .buttonStyle(.hoverable)
-                            .disabled(profile.id == profiles.activeID)
-                            .tip(profile.id == profiles.activeID
-                                 ? "Switch to another profile first to delete this one"
-                                 : "Delete this profile and its cards")
-                    }
+                    Button { deleting = profile } label: { Image(systemName: "trash") }
+                        .buttonStyle(.hoverable)
+                        .tip(profile.id == profiles.activeID
+                             ? "Delete this profile (the one you're using) and start setup again"
+                             : "Delete this profile and its cards")
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
@@ -108,13 +108,28 @@ private struct ProfileList: View {
         .confirmationDialog("Delete “\(deleting?.name ?? "")”?",
                             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Delete Profile and Its Cards", role: .destructive) {
-                if let deleting { profiles.delete(deleting.id) }
+                guard let profile = deleting else { return }
+                if profile.id == profiles.activeID {
+                    // The one you're using: ask a second time.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { deletingCurrent = profile }
+                } else {
+                    profiles.delete(profile.id)
+                }
             }
         } message: {
             Text((deleting?.isOriginal == true
                   ? "This is your first profile. Its cards, settings, backups and sync sign-in will be removed from Animus. "
                   : "Its cards, settings, backups and sync sign-in will be removed from Animus. ")
                  + "The files go to the Bin, so you can get them back until you empty it. Anything synced to AnkiWeb stays on AnkiWeb.")
+        }
+        .alert("Delete the profile you're using?", isPresented: Binding(get: { deletingCurrent != nil },
+                                                                         set: { if !$0 { deletingCurrent = nil } })) {
+            Button("Delete and Start Setup", role: .destructive) { deleteCurrentProfile() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("“\(deletingCurrent?.name ?? "")” is open right now. Animus will close it, move its cards to the Bin, and take you to setup to start a new profile"
+                 + (profiles.profiles.count > 1 ? ". Your other profiles stay as they are." : ".")
+                 + " If you sync with AnkiWeb, you can sign in again during setup to get your cards back.")
         }
     }
 }

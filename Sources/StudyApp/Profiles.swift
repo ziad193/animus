@@ -132,7 +132,8 @@ final class ProfileStore {
             // The first profile's files sit in the main folder, next to the other
             // profiles' folders, so move only its own things.
             let base = profile.folder
-            let bundle = base.appendingPathComponent("\(profile.name) (deleted profile)", isDirectory: true)
+            let label = Library.isTestCollection ? "deleted test profile" : "deleted profile"
+            let bundle = base.appendingPathComponent("\(profile.name) (\(label))", isDirectory: true)
             try? fm.createDirectory(at: bundle, withIntermediateDirectories: true)
             let items = (try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: nil)) ?? []
             for item in items where item.lastPathComponent != "Profiles" && item != bundle {

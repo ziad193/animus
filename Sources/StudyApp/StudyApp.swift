@@ -28,6 +28,7 @@ struct StudyAppMain: App {
             RootView()
                 .frame(minWidth: 860, minHeight: 560)
                 .profileScope(session, profiles: profiles, switchProfile: switchProfile)
+                .environment(\.deleteCurrentProfile, deleteCurrentProfile)
         }
         .defaultSize(width: 1100, height: 720)
         .windowResizability(.contentMinSize)
@@ -77,6 +78,21 @@ struct StudyAppMain: App {
         Task {
             await old.library.engine?.close()
             profiles.switchTo(id)
+            CardWebView.reset()
+            session = ProfileSession()
+        }
+    }
+
+    /// Deletes the profile you're using (its files go to the Bin), then starts a
+    /// fresh, empty profile that opens on the setup screen.
+    private func deleteCurrentProfile() {
+        let old = session
+        let oldID = profiles.activeID
+        Task {
+            await old.library.engine?.close()
+            let fresh = profiles.add(named: "New profile")
+            profiles.switchTo(fresh.id)
+            profiles.delete(oldID)
             CardWebView.reset()
             session = ProfileSession()
         }
@@ -136,7 +152,17 @@ private struct SwitchProfileKey: EnvironmentKey {
     static let defaultValue: (String) -> Void = { _ in }
 }
 
+private struct DeleteCurrentProfileKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+
 extension EnvironmentValues {
+    /// Deletes the open profile and starts setup for a new one.
+    var deleteCurrentProfile: () -> Void {
+        get { self[DeleteCurrentProfileKey.self] }
+        set { self[DeleteCurrentProfileKey.self] = newValue }
+    }
+
     /// Opens another profile.
     var switchProfile: (String) -> Void {
         get { self[SwitchProfileKey.self] }
