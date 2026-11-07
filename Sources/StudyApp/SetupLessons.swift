@@ -30,7 +30,7 @@ struct MemoryLesson: View {
             out.append(Point(day: t, value: 100 * exp(-t / 2.2), series: "Without reviews"))
             let last = reviews.last { $0 <= t } ?? 0
             let done = Double(reviews.filter { $0 <= t }.count)
-            out.append(Point(day: t, value: 100 * exp(-(t - last) / (2.2 * pow(2.6, done))), series: "With Iterum"))
+            out.append(Point(day: t, value: 100 * exp(-(t - last) / (2.2 * pow(2.6, done))), series: "With Animus"))
         }
         return out
     }()
@@ -61,7 +61,7 @@ struct MemoryLesson: View {
     private var chart: some View {
         let visible = Self.points.filter { $0.day <= Self.length * drawn + 0.001 }
         return Chart {
-            ForEach(visible.filter { $0.series == "With Iterum" }) { p in
+            ForEach(visible.filter { $0.series == "With Animus" }) { p in
                 AreaMark(x: .value("Day", p.day), y: .value("Remembered", p.value), series: .value("Line", p.series))
                     .foregroundStyle(LinearGradient(colors: [accent.color.opacity(0.25), accent.color.opacity(0.02)],
                                                     startPoint: .top, endPoint: .bottom))
@@ -70,7 +70,7 @@ struct MemoryLesson: View {
             ForEach(visible) { p in
                 LineMark(x: .value("Day", p.day), y: .value("Remembered", p.value), series: .value("Line", p.series))
                     .foregroundStyle(by: .value("Line", p.series))
-                    .lineStyle(p.series == "With Iterum" ? StrokeStyle(lineWidth: 2.5, lineJoin: .round)
+                    .lineStyle(p.series == "With Animus" ? StrokeStyle(lineWidth: 2.5, lineJoin: .round)
                                                           : StrokeStyle(lineWidth: 2, dash: [5, 4]))
             }
             // Each review, labelled with the gap since the last one.
@@ -86,7 +86,7 @@ struct MemoryLesson: View {
                     }
             }
         }
-        .chartForegroundStyleScale(["With Iterum": accent.color, "Without reviews": Color.secondary])
+        .chartForegroundStyleScale(["With Animus": accent.color, "Without reviews": Color.secondary])
         .chartLegend(position: .bottom, alignment: .leading)
         .chartYScale(domain: 0...130)
         .chartXScale(domain: 0...Self.length)
@@ -119,7 +119,7 @@ struct TryCardLesson: View {
     private let cards = [
         ("What is the powerhouse of the cell?", "The mitochondria"),
         ("Which side of the heart pumps blood to the body?", "The left ventricle"),
-        ("What does “iterum” mean in Latin?", "Again"),
+        ("What does “animus” mean in Latin?", "Mind"),
     ]
 
     private let intervals: [Rating: String] = [.again: "<1m", .hard: "6m", .good: "1d", .easy: "4d"]

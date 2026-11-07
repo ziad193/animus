@@ -243,12 +243,20 @@ struct SettingsView: View {
 private struct GeneralPreferences: View {
     @AppStorage(Pref.setupDone) private var setupDone = false
     @AppStorage(Pref.slidesHint) private var slidesHint = true
+    @AppStorage(UpdateChecker.automaticKey, store: AppDefaults.base) private var autoUpdates = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             AppearancePicker()
             HeatmapColorPicker()
             Divider()
+            Toggle(isOn: $autoUpdates) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Check for updates automatically")
+                    Text("Once a day, Animus asks GitHub whether there's a newer version. Nothing about you or your cards is sent.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Toggle(isOn: $slidesHint) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Slides & Notes hint in Add Cards")
@@ -438,7 +446,7 @@ private struct BackupPreferences: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Backups").font(.headline)
-            Text("Iterum backs up your cards when it opens, every 30 minutes while you study, and before any big sync change. Older backups are thinned to daily, weekly and monthly copies.")
+            Text("Animus backs up your cards when it opens, every 30 minutes while you study, and before any big sync change. Older backups are thinned to daily, weekly and monthly copies.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {

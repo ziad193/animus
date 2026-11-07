@@ -111,7 +111,7 @@ final class Library {
     }
 
     /// Shared deck files (.apkg) in Downloads, newest first, for setup to offer.
-    /// Only file names and dates are read. macOS asks once before Iterum can look.
+    /// Only file names and dates are read. macOS asks once before Animus can look.
     nonisolated static func recentDeckFiles(limit: Int = 2) -> [RecentDeckFile] {
         let fm = FileManager.default
         var folder = fm.urls(for: .downloadsDirectory, in: .userDomainMask)[0]

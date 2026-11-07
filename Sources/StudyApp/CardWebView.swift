@@ -358,7 +358,7 @@ private final class PassiveWebView: WKWebView {
     override var acceptsFirstResponder: Bool { false }
 }
 
-/// Serves the app's own web files (MathJax) from inside Iterum.app, and nothing else.
+/// Serves the app's own web files (MathJax) from inside Animus.app, and nothing else.
 final class AppResourceHandler: NSObject, WKURLSchemeHandler {
     private static let folder = Bundle.main.resourceURL?.appendingPathComponent("mathjax").standardizedFileURL
 

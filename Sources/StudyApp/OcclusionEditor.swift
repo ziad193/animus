@@ -47,7 +47,7 @@ struct OcclusionEditor: View {
     @State private var error: String?
     @State private var working = false
     @State private var dropTargeted = false
-    /// Shapes Iterum can't edit (e.g. freehand polygons drawn in Anki); kept as they are.
+    /// Shapes Animus can't edit (e.g. freehand polygons drawn in Anki); kept as they are.
     @State private var keptShapes: [String] = []
 
     var body: some View {
@@ -152,7 +152,7 @@ struct OcclusionEditor: View {
     @discardableResult
     private func load(_ url: URL) -> Bool {
         guard let picture = NSImage(contentsOf: url), picture.size.width > 0 else {
-            error = "That file isn't a picture Iterum can open."
+            error = "That file isn't a picture Animus can open."
             return false
         }
         imageURL = url

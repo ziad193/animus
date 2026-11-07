@@ -1,6 +1,6 @@
-# Iterum
+# Animus
 
-*Iterum* is Latin for "again". It's a lightweight, native macOS flashcard app that works with your Anki decks.
+*Animus* is Latin for "mind". It's a lightweight, native macOS flashcard app that works with your Anki decks.
 It runs on Anki's own open-source engine, so scheduling (including FSRS) behaves exactly
 like the official apps, and your cards stay in standard Anki format.
 
@@ -65,9 +65,23 @@ You need Swift (Xcode Command Line Tools) and Rust.
 
 ```bash
 ./build-engine.sh   # slow the first time; builds Anki's engine
-./build-app.sh      # builds build/Iterum.app
-open build/Iterum.app
+./build-app.sh      # builds build/Animus.app (Apple Silicon only, quick)
+open build/Animus.app
 ```
+
+To share the app, build one that runs on both Apple Silicon and Intel Macs (needs
+`rustup target add x86_64-apple-darwin` once):
+
+```bash
+./build-app.sh --universal
+```
+
+## Releases and updates
+
+Animus checks GitHub once a day for a newer release (Preferences › General can turn this off).
+The repository it checks is `AnimusUpdateRepository` in `Info.plist`. To release a new version,
+raise `CFBundleShortVersionString` in `Info.plist`, build with `--universal`, zip `build/Animus.app`,
+and publish a GitHub release tagged with the version (e.g. `v0.2.0`) with the zip attached.
 
 `vendor/anki` is Anki 26.09.4, pinned as a git submodule. After cloning, fetch it with
 `git submodule update --init --recursive`.
@@ -77,8 +91,10 @@ from the [protobuf releases](https://github.com/protocolbuffers/protobuf/release
 
 ## License
 
-AGPL-3.0-or-later, because the app is built on Anki's engine. Anki is © Ankitects Pty Ltd and contributors.
-This app isn't affiliated with or endorsed by Anki.
+AGPL-3.0-or-later (see [LICENSE](LICENSE)), because the app is built on Anki's engine.
+Anki is © Ankitects Pty Ltd and contributors. This app isn't affiliated with or endorsed by Anki.
+
+MathJax (in `Resources/mathjax`) is © The MathJax Consortium, Apache License 2.0 (see `Resources/mathjax/LICENSE`).
 
 ## Testing sync without a real account
 

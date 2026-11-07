@@ -8,6 +8,7 @@ import StudyCore
 /// hands out is saved, never the password.
 enum SyncKeychain {
     /// A test collection gets its own sign-in, so it can never sync the real one.
+    /// Still named after the app's old name (Iterum): renaming it would sign everyone out.
     private static var service: String { Library.isTestCollection ? "Iterum Sync (test)" : "Iterum Sync" }
     /// One sign-in per profile ("default" for the first, as before).
     private static var account: String { ProfileStore.currentID }

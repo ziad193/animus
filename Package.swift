@@ -10,7 +10,7 @@ let package = Package(
             name: "CStudyEngine",
             path: "Sources/CStudyEngine",
             linkerSettings: [
-                .unsafeFlags(["-L", "engine/target/release"]),
+                .unsafeFlags(["-L", "engine/target/lib"]),
                 .linkedLibrary("study_engine"),
                 .linkedFramework("Security"),
                 .linkedFramework("SystemConfiguration"),

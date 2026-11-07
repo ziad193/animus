@@ -24,7 +24,7 @@ struct StudyAppMain: App {
     @State private var session = ProfileSession()
 
     var body: some Scene {
-        WindowGroup("Iterum") {
+        WindowGroup("Animus") {
             RootView()
                 .frame(minWidth: 860, minHeight: 560)
                 .profileScope(session, profiles: profiles, switchProfile: switchProfile)
@@ -35,6 +35,12 @@ struct StudyAppMain: App {
         .commands {
             CommandGroup(replacing: .undoRedo) {
                 UndoCommands(library: session.library)
+            }
+            CommandGroup(after: .appInfo) {
+                UpdateCommand()
+            }
+            CommandGroup(replacing: .help) {
+                HelpCommands(library: session.library, profiles: profiles)
             }
             CommandGroup(replacing: .newItem) {
                 AddCardsCommand()
@@ -179,12 +185,14 @@ struct RootView: View {
         }
         // Start a card view loading now, so the first card shows instantly later.
         .onAppear { CardWebView.prepare() }
+        // At most once a day: is there a newer Animus on GitHub?
+        .updateAlerts()
         // Sync once the collection is open (if signed in and automatic sync is on).
         .task(id: library.isReady) {
             sync.attach(library)
             if library.isReady { await sync.syncIfAutomatic() }
         }
-        .alert("Iterum",
+        .alert("Animus",
                isPresented: Binding(get: { library.notice != nil }, set: { if !$0 { library.notice = nil } })) {
             Button("OK") { library.notice = nil }
         } message: {
@@ -236,7 +244,7 @@ struct WelcomeView: View {
                     .font(.system(size: 52))
                     .foregroundStyle(.tint)
                     .symbolRenderingMode(.hierarchical)
-                Text("Welcome to Iterum")
+                Text("Welcome to Animus")
                     .font(.largeTitle.weight(.semibold))
                 Text("Flashcards that remember what you forget.\nChoose where your cards come from to get started.")
                     .multilineTextAlignment(.center)

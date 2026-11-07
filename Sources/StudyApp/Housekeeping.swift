@@ -385,7 +385,7 @@ struct CollectionToolsView: View {
 
     private func exportAll() async {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "Iterum collection \(Date().formatted(.iso8601.year().month().day())).colpkg"
+        panel.nameFieldStringValue = "Animus collection \(Date().formatted(.iso8601.year().month().day())).colpkg"
         panel.allowedContentTypes = [.init(filenameExtension: "colpkg") ?? .data]
         guard panel.runModal() == .OK, let url = panel.url, let engine = library.engine else { return }
         do {

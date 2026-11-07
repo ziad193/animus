@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>Iterum</string>
-    <key>CFBundleDisplayName</key><string>Iterum</string>
-    <key>CFBundleIdentifier</key><string>com.ziad.studyapp</string>
+    <key>CFBundleName</key><string>Animus</string>
+    <key>CFBundleDisplayName</key><string>Animus</string>
+    <key>CFBundleIdentifier</key><string>com.ziad.animus</string>
     <key>CFBundleExecutable</key><string>StudyApp</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -12,8 +12,9 @@
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSHumanReadableCopyright</key><string>© 2026 Ziad. Free software under the GNU AGPL v3. Built on Anki.</string>
     <key>NSDownloadsFolderUsageDescription</key>
-	<string>Iterum looks in Downloads for shared deck files (.apkg) so you can add one with a click. Only file names are read.</string>
-	<key>NSMicrophoneUsageDescription</key><string>Iterum uses the microphone only when you press Record to add your voice to a card.</string>
+	<string>Animus looks in Downloads for shared deck files (.apkg) so you can add one with a click. Only file names are read.</string>
+	<key>NSMicrophoneUsageDescription</key><string>Animus uses the microphone only when you press Record to add your voice to a card.</string>
 </dict>
 </plist>

@@ -164,7 +164,7 @@ struct SetupView: View {
         let first = name.trimmingCharacters(in: .whitespaces)
         switch step {
         case .welcome:
-            return ("hand.wave.fill", "Welcome to Iterum",
+            return ("hand.wave.fill", "Welcome to Animus",
                     "A friendlier way to use Anki, the flashcard app that helps you remember things for good. Setup takes about two minutes.")
         case .aboutYou:
             return ("person.crop.circle.fill", "First, a little about you",
@@ -313,7 +313,7 @@ struct SetupView: View {
             }
         }
         .task {
-            // Off the main thread: the first time, macOS asks before Iterum can look in Downloads.
+            // Off the main thread: the first time, macOS asks before Animus can look in Downloads.
             downloadedDecks = await Task.detached(priority: .userInitiated) { Library.recentDeckFiles() }.value
         }
     }

@@ -395,7 +395,7 @@ struct PomodoroExplainer: View {
                 step("2", "Take a 5-minute break. Stand up, stretch, get water.")
                 step("3", "Repeat. After 4 rounds, take a longer 15-minute break.")
             }
-            Text("Short breaks keep your concentration fresh, so you remember more and burn out less. In Iterum, a break covers the study screen so you actually rest. Change the lengths under Customise.")
+            Text("Short breaks keep your concentration fresh, so you remember more and burn out less. In Animus, a break covers the study screen so you actually rest. Change the lengths under Customise.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

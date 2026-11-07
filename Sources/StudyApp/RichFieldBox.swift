@@ -164,7 +164,7 @@ final class VoiceRecorder {
         default: allowed = false
         }
         guard allowed else {
-            problem = "Iterum isn't allowed to use the microphone. Turn it on in System Settings › Privacy & Security › Microphone."
+            problem = "Animus isn't allowed to use the microphone. Turn it on in System Settings › Privacy & Security › Microphone."
             return
         }
         let stamp = Date().formatted(.iso8601.year().month().day().time(includingFractionalSeconds: false))

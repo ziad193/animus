@@ -257,7 +257,7 @@ private struct ExportDeckSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Export “\(deck.shortName)”").font(.title2.weight(.semibold))
-            Text("Saves this deck\(deck.children.isEmpty ? "" : " and its \(deck.children.count) sections") as an .apkg file. It opens in Iterum, Anki and other Anki apps, so it's handy for sharing or as a backup.")
+            Text("Saves this deck\(deck.children.isEmpty ? "" : " and its \(deck.children.count) sections") as an .apkg file. It opens in Animus, Anki and other Anki apps, so it's handy for sharing or as a backup.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Toggle(isOn: $withProgress) {

@@ -296,7 +296,7 @@ do {
         print("options for \(o.deckName): preset \(o.presetID) of \(o.presets.map { "\($0.name)×\($0.useCount)" }) fsrs \(o.fsrs)")
         print("  settings: new \(o.settings.newPerDay)/day reviews \(o.settings.reviewsPerDay) steps \(o.settings.learnSteps) grad \(o.settings.graduatingIntervalGood) retention \(o.settings.desiredRetention)")
         var changed = o.settings; changed.newPerDay = 7; changed.learnSteps = [2, 15, 60]
-        try await engine.saveDeckOptions(deck: leaf.id, preset: o.presetID, settings: changed, fsrs: o.fsrs, newPresetName: "Iterum test copy")
+        try await engine.saveDeckOptions(deck: leaf.id, preset: o.presetID, settings: changed, fsrs: o.fsrs, newPresetName: "Animus test copy")
         o = try await engine.deckOptions(leaf.id)
         print("after own copy: preset \(o.presetID) name \(o.presets.first { $0.id == o.presetID }!.name) new \(o.settings.newPerDay) steps \(o.settings.learnSteps)")
         let p = try await engine.preferences()
@@ -336,7 +336,7 @@ do {
         print("after suspend: \(try await engine.browseRows([first.id]).first!.state)")
         try await engine.setSuspended([first.id], false)
         print("after unsuspend: \(try await engine.browseRows([first.id]).first!.state)")
-        let newDeck = try await engine.addDeck(named: "Iterum Test::Moved")
+        let newDeck = try await engine.addDeck(named: "Animus Test::Moved")
         try await engine.moveCards([first.id], toDeck: newDeck)
         print("after move: \(try await engine.browseRows([first.id]).first!.text(.deck))")
         print("deleted notes: \(try await engine.deleteNotes(ofCards: [first.id]))")

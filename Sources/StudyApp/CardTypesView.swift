@@ -76,7 +76,7 @@ struct CardTypesView: View {
         .confirmationDialog(deleteTitle, isPresented: $confirmDelete) {
             Button("Delete Card Type and Notes", role: .destructive) { Task { await deleteSelected() } }
         } message: {
-            Text("This can't be undone, but Iterum makes a backup first.")
+            Text("This can't be undone, but Animus makes a backup first.")
         }
         .sheet(isPresented: $copying) { copySheet }
     }

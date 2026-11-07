@@ -9,9 +9,27 @@ enum AppDefaults {
 
     /// The app's main settings store. Test collections get a separate one, so
     /// a test run can never change the real app's settings or profiles.
-    static let base: UserDefaults = Library.isTestCollection
-        ? (UserDefaults(suiteName: "com.ziad.studyapp.test") ?? .standard)
-        : .standard
+    static let base: UserDefaults = {
+        if Library.isTestCollection { return UserDefaults(suiteName: "com.ziad.studyapp.test") ?? .standard }
+        carryOverOldSettings()
+        return .standard
+    }()
+
+    /// The app used to be "Iterum" with the ID com.ziad.studyapp, whose settings
+    /// macOS keeps under that name. The first time Animus opens, copy them across
+    /// so nothing is lost (theme, exams, study time, profiles, setup done…).
+    /// The old copy is left untouched.
+    private static func carryOverOldSettings() {
+        let oldID = "com.ziad.studyapp"
+        let defaults = UserDefaults.standard
+        guard Bundle.main.bundleIdentifier != oldID,
+              !defaults.bool(forKey: "migratedFromIterum"),
+              let old = defaults.persistentDomain(forName: oldID), !old.isEmpty else { return }
+        for (key, value) in old where defaults.object(forKey: key) == nil {
+            defaults.set(value, forKey: key)
+        }
+        defaults.set(true, forKey: "migratedFromIterum")
+    }
 }
 
 /// A person (or subject) with their own cards, settings and sync account,
