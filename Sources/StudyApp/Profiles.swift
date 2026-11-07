@@ -43,8 +43,12 @@ struct Profile: Codable, Identifiable, Hashable {
     var isOriginal: Bool { id == Self.originalID }
 
     var folder: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("StudyApp", isDirectory: true)
+        // A test collection keeps every profile inside its own test folder, so
+        // nothing done in a test (like deleting a profile) can reach real files.
+        let base = Library.isTestCollection
+            ? URL(fileURLWithPath: ProcessInfo.processInfo.environment["ITERUM_DATA_FOLDER"] ?? "", isDirectory: true)
+            : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("StudyApp", isDirectory: true)
         return isOriginal ? base : base.appendingPathComponent("Profiles/\(id)", isDirectory: true)
     }
 
@@ -118,14 +122,37 @@ final class ProfileStore {
         save()
     }
 
-    /// Deletes a profile's cards and settings. The original profile and the open one can't be deleted.
+    /// Moves a profile's cards, settings and backups to the Bin (so it can be
+    /// recovered), and forgets its sync sign-in. The open profile can't be
+    /// deleted (switch first), and there must always be one profile left.
     func delete(_ id: String) {
-        guard id != activeID, let profile = profiles.first(where: { $0.id == id }), !profile.isOriginal else { return }
-        try? FileManager.default.removeItem(at: profile.folder)
-        UserDefaults.standard.removePersistentDomain(forName: "com.ziad.studyapp.profile.\(id)")
-        let plist = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Preferences/com.ziad.studyapp.profile.\(id).plist")
-        try? FileManager.default.removeItem(at: plist)
+        guard id != activeID, profiles.count > 1, let profile = profiles.first(where: { $0.id == id }) else { return }
+        let fm = FileManager.default
+        if profile.isOriginal {
+            // The first profile's files sit in the main folder, next to the other
+            // profiles' folders, so move only its own things.
+            let base = profile.folder
+            let bundle = base.appendingPathComponent("\(profile.name) (deleted profile)", isDirectory: true)
+            try? fm.createDirectory(at: bundle, withIntermediateDirectories: true)
+            let items = (try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: nil)) ?? []
+            for item in items where item.lastPathComponent != "Profiles" && item != bundle {
+                try? fm.moveItem(at: item, to: bundle.appendingPathComponent(item.lastPathComponent))
+            }
+            try? fm.trashItem(at: bundle, resultingItemURL: nil)
+            // Its settings share the app's main store with the profile list: clear only its own.
+            let keep = ["profiles.", "updates.", "migratedFromIterum", "NS", "Apple"]
+            for key in AppDefaults.base.dictionaryRepresentation().keys
+            where !keep.contains(where: { key.hasPrefix($0) }) {
+                AppDefaults.base.removeObject(forKey: key)
+            }
+        } else {
+            try? fm.trashItem(at: profile.folder, resultingItemURL: nil)
+            UserDefaults.standard.removePersistentDomain(forName: "com.ziad.studyapp.profile.\(id)")
+            let plist = fm.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Preferences/com.ziad.studyapp.profile.\(id).plist")
+            try? fm.removeItem(at: plist)
+        }
+        SyncKeychain.delete(account: id)
         profiles.removeAll { $0.id == id }
         save()
     }

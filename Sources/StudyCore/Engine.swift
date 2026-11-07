@@ -638,6 +638,19 @@ public actor Engine {
         _ = try body.withCString { try Self.takeString(study_sync_media(handle, $0)) }
     }
 
+    public struct MediaProgress: Decodable, Sendable, Equatable {
+        public let active: Bool
+        public let checked: Int
+        public let uploaded: Int
+        public let downloaded: Int
+        public let removed: Int
+    }
+
+    /// How far the running media sync has got (pictures and sounds).
+    public func mediaProgress() throws -> MediaProgress {
+        try call(study_media_progress, Optional<Int64>.none)
+    }
+
     // MARK: - Deck menu
 
     private struct DeckRequest: Encodable {

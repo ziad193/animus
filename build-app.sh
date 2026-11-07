@@ -18,6 +18,8 @@ if [[ "$1" == "--universal" ]]; then
   BINARY=.build/universal/StudyApp
 else
   [ -f engine/target/lib/libstudy_engine.a ] || ./build-engine.sh
+  # A universal build leaves .build/release pointing at another folder; let Swift remake it.
+  [ -L .build/release ] && rm .build/release
   swift build -c release
   BINARY=.build/release/StudyApp
 fi

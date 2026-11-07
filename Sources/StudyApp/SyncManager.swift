@@ -39,7 +39,10 @@ enum SyncKeychain {
         SecItemAdd(item as CFDictionary, nil)
     }
 
-    static func delete() {
+    static func delete() { delete(account: account) }
+
+    /// Forgets the sign-in of any profile (e.g. one being deleted).
+    static func delete(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -158,7 +161,7 @@ final class SyncManager {
         guard let auth, let engine = library?.engine, !isBusy, !isChoosing, !studying else { return }
         status = .syncing
         do {
-            let result = try await engine.sync(auth)
+            let result = try await Self.retryingOnce { try await engine.sync(auth) }
             if let moved = result.newEndpoint, !moved.isEmpty {
                 // AnkiWeb moved this account to another server; remember it.
                 let updated = SyncAuth(hkey: auth.hkey, endpoint: moved)
@@ -187,6 +190,26 @@ final class SyncManager {
             status = quiet ? .idle : .failed(message)
         }
         await library?.refresh()
+    }
+
+    /// Runs a sync step, and if it fails with what looks like a hiccup (an odd
+    /// reply, a dropped connection), waits a moment and tries once more before
+    /// telling you. Problems that won't fix themselves (wrong password, a wrong
+    /// clock, being offline…) are reported straight away.
+    static func retryingOnce<T>(_ work: () async throws -> T) async throws -> T {
+        do {
+            return try await work()
+        } catch {
+            guard isHiccup(error.localizedDescription) else { throw error }
+            try? await Task.sleep(for: .seconds(2))
+            return try await work()
+        }
+    }
+
+    nonisolated static func isHiccup(_ message: String) -> Bool {
+        let lasting = ["wasn't right", "clock looks wrong", "newer version", "too big to upload",
+                       "disagree about your cards", "offline", "cancelled", "address doesn't look right"]
+        return !lasting.contains { message.contains($0) }
     }
 
     private var isChoosing: Bool {
@@ -224,19 +247,44 @@ final class SyncManager {
     private func syncMediaInBackground() {
         guard let auth, let engine = library?.engine, !mediaSyncing else { return }
         mediaSyncing = true
+        mediaProgress = nil
+        // Check how far it's got a few times a second, for the progress bar.
+        let watcher = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(400))
+                guard let progress = try? await engine.mediaProgress(), progress.active else { continue }
+                self?.mediaProgress = progress
+            }
+        }
         Task.detached(priority: .utility) {
             let failure: String?
             do {
-                try engine.syncMedia(auth)
+                try await Self.retryingOnce { try engine.syncMedia(auth) }
                 failure = nil
             } catch {
                 failure = error.localizedDescription
             }
             await MainActor.run { [weak self] in
+                watcher.cancel()
                 self?.mediaSyncing = false
+                self?.mediaProgress = nil
                 if let failure, self?.status == .idle { self?.status = .failed("Pictures and sounds: \(failure)") }
             }
         }
+    }
+
+    /// While pictures and sounds sync: how many have gone each way so far.
+    private(set) var mediaProgress: Engine.MediaProgress?
+
+    /// e.g. "120 downloaded · 4 uploaded", or "Checking 300 files…" before any move.
+    var mediaProgressText: String {
+        guard let p = mediaProgress else { return "Getting ready…" }
+        var parts: [String] = []
+        if p.downloaded > 0 { parts.append("\(p.downloaded.formatted()) downloaded") }
+        if p.uploaded > 0 { parts.append("\(p.uploaded.formatted()) uploaded") }
+        if p.removed > 0 { parts.append("\(p.removed.formatted()) removed") }
+        if parts.isEmpty { return p.checked > 0 ? "Checking \(p.checked.formatted()) files…" : "Getting ready…" }
+        return parts.joined(separator: " · ")
     }
 
     /// e.g. "Synced 3 min ago".

@@ -66,10 +66,13 @@ private struct ProfileList: View {
                     Button { newName = profile.name; renaming = profile } label: { Image(systemName: "pencil") }
                         .buttonStyle(.hoverable)
                         .tip("Rename")
-                    if profile.id != profiles.activeID && !profile.isOriginal {
+                    if profiles.profiles.count > 1 {
                         Button { deleting = profile } label: { Image(systemName: "trash") }
                             .buttonStyle(.hoverable)
-                            .tip("Delete this profile and its cards")
+                            .disabled(profile.id == profiles.activeID)
+                            .tip(profile.id == profiles.activeID
+                                 ? "Switch to another profile first to delete this one"
+                                 : "Delete this profile and its cards")
                     }
                 }
                 .padding(.horizontal, 8)
@@ -108,7 +111,10 @@ private struct ProfileList: View {
                 if let deleting { profiles.delete(deleting.id) }
             }
         } message: {
-            Text("This removes its cards and settings from this Mac. Anything synced to AnkiWeb stays there.")
+            Text((deleting?.isOriginal == true
+                  ? "This is your first profile. Its cards, settings, backups and sync sign-in will be removed from Animus. "
+                  : "Its cards, settings, backups and sync sign-in will be removed from Animus. ")
+                 + "The files go to the Bin, so you can get them back until you empty it. Anything synced to AnkiWeb stays on AnkiWeb.")
         }
     }
 }

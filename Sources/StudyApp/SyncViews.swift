@@ -31,6 +31,15 @@ struct SyncPresenter: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // While pictures and sounds sync (which can take a while the first time).
+            .overlay(alignment: .bottom) {
+                if sync.mediaSyncing {
+                    MediaSyncBar()
+                        .padding(.bottom, 16)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.snappy, value: sync.mediaSyncing)
             .sheet(isPresented: $sync.showingSignIn) { SyncSignInSheet() }
             .sheet(isPresented: Binding(get: { sync.isChoosingCopy }, set: { if !$0 { sync.dismissChoice() } })) {
                 FullSyncChoice()
@@ -48,6 +57,39 @@ struct SyncPresenter: ViewModifier {
             } message: {
                 Text(sync.serverMessage ?? "")
             }
+    }
+}
+
+/// "Syncing pictures and sounds · 120 downloaded", with a moving bar. The
+/// total isn't known in advance (the server sends changes in batches), so the
+/// bar shows activity rather than a percentage.
+private struct MediaSyncBar: View {
+    @Environment(SyncManager.self) private var sync
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text("Syncing pictures and sounds").font(.callout.weight(.medium))
+                    Text(sync.mediaProgressText)
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
+                        .animation(.snappy, value: sync.mediaProgressText)
+                }
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .frame(width: 260)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator.opacity(0.5)))
+        .shadow(color: .black.opacity(0.15), radius: 10, y: 4)
+        .tip("You can keep studying while this finishes.")
     }
 }
 

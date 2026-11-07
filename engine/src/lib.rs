@@ -1830,15 +1830,24 @@ fn sync_message(err: &AnkiError) -> String {
             SyncErrorKind::ResyncRequired | SyncErrorKind::SanityCheckFailed { .. } => {
                 "The server and this Mac disagree about your cards. Choose which copy to keep.".into()
             }
-            _ => format!("Sync didn't finish: {}", source.info),
+            // Usually a hiccup: a reply that didn't come from the sync server itself
+            // (a gateway, a Wi-Fi sign-in page, an account being moved between servers).
+            _ => format!(
+                "The sync server sent back something unexpected, so syncing stopped to keep your cards safe. \
+                 Try again in a moment.\n\nDetails: {}",
+                source.info
+            ),
         },
         AnkiError::NetworkError { source } => match source.kind {
             NetworkErrorKind::Offline => "You seem to be offline. Check your internet connection.".into(),
             NetworkErrorKind::Timeout => "The sync server took too long to answer. Try again in a moment.".into(),
-            _ => format!("Couldn't reach the sync server: {}", source.info),
+            _ => format!(
+                "Couldn't reach the sync server. Check your internet connection and try again.\n\nDetails: {}",
+                source.info
+            ),
         },
         AnkiError::Interrupted => "Sync was cancelled.".into(),
-        other => format!("Sync didn't finish: {other}"),
+        other => format!("Sync didn't finish. Try again in a moment.\n\nDetails: {other}"),
     }
 }
 
@@ -3139,6 +3148,50 @@ pub unsafe extern "C" fn study_redo(engine: *mut Engine, json: *const c_char) ->
             inner.current = None;
             inner.col.redo().map_err(|e| format!("nothing to redo: {e}"))?;
             Ok(true)
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Progress of a running media sync (read while it runs; the sync doesn't hold the lock)
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Default)]
+struct MediaProgressJson {
+    /// False when no media sync has reported anything yet.
+    active: bool,
+    checked: u64,
+    uploaded: u64,
+    downloaded: u64,
+    removed: u64,
+}
+
+/// All the numbers in a line like "Added: 3↑ 5↓", in order.
+fn numbers_in(text: &str) -> Vec<u64> {
+    text.split(|c: char| !c.is_ascii_digit()).filter_map(|n| n.parse().ok()).collect()
+}
+
+/// How far the current media sync has got. JSON: null.
+///
+/// # Safety
+/// `engine` must be a live pointer from `study_open`; `json` a valid C string.
+#[no_mangle]
+pub unsafe extern "C" fn study_media_progress(engine: *mut Engine, json: *const c_char) -> *mut c_char {
+    use anki::services::CollectionService;
+    use anki_proto::collection::progress::Value;
+    unsafe {
+        with_request(engine, json, |inner, _: Option<i64>| {
+            let progress = inner.col.latest_progress().map_err(|e| e.to_string())?;
+            let Some(Value::MediaSync(m)) = progress.value else { return Ok(MediaProgressJson::default()) };
+            let added = numbers_in(&m.added);
+            let removed = numbers_in(&m.removed);
+            Ok(MediaProgressJson {
+                active: true,
+                checked: numbers_in(&m.checked).first().copied().unwrap_or(0),
+                uploaded: added.first().copied().unwrap_or(0),
+                downloaded: added.get(1).copied().unwrap_or(0),
+                removed: removed.iter().sum(),
+            })
         })
     }
 }

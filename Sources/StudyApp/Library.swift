@@ -33,11 +33,9 @@ final class Library {
     /// ~/Library/Application Support/StudyApp/
     /// The current profile's folder.
     nonisolated static var folder: URL {
-        // For developers: ITERUM_DATA_FOLDER runs the app on a separate test collection.
-        if let test = ProcessInfo.processInfo.environment["ITERUM_DATA_FOLDER"], !test.isEmpty {
-            return URL(fileURLWithPath: test, isDirectory: true)
-        }
-        return ProfileStore.currentFolder
+        // For developers: ITERUM_DATA_FOLDER runs the app on a separate test
+        // collection; each profile's folder then lives inside it (see Profile.folder).
+        ProfileStore.currentFolder
     }
 
     /// True when running on a developer test collection.
