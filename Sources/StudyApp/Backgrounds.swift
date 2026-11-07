@@ -201,7 +201,7 @@ struct BannerBackdrop: View {
 
     var body: some View {
         BackgroundFill(background: background)
-            .overlay(LinearGradient(colors: [.black.opacity(0.25), .black.opacity(0.55)],
+            .overlay(LinearGradient(colors: [.black.opacity(0.3), .black.opacity(0.6)],
                                     startPoint: .top, endPoint: .bottom))
             .clipped()
             // White text and a light ring on the picture, in light or dark mode.

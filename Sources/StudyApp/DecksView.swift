@@ -386,8 +386,10 @@ private struct TodayPage: View {
                     .frame(maxWidth: 1280, alignment: .leading)
                     .frame(maxWidth: .infinity)
                     .background { BannerBackdrop(background: background) }
-                    // White text and a light ring on the picture, in light or dark mode.
+                    // White text and a light ring on the picture, in light or dark mode,
+                    // with dark frosted glass behind the greeting and the ring.
                     .environment(\.colorScheme, .dark)
+                    .environment(\.onPicture, true)
             }
             VStack(alignment: .leading, spacing: 26) {
                 if !showsBanner { header }
