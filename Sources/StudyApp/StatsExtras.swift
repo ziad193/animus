@@ -231,7 +231,7 @@ struct IntervalChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(median.map { "Half of your review cards come back every **\(CardInfoSheet.days(Double($0)))** or longer. The more cards on the right, the better they're sticking." }
+            Text(median.map { "Half of your review cards come back every **\(IntervalText.days(Double($0)))** or longer. The more cards on the right, the better they're sticking." }
                  ?? "No review cards yet.")
                 .font(.callout)
                 .foregroundStyle(.secondary)

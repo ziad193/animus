@@ -6,16 +6,25 @@ import StudyCore
 /// loaded a screenful at a time, so even 50,000 cards scroll smoothly.
 ///
 /// The extra properties exist only so each column has its own sort key.
+///
+/// They're stored, not computed: identical computed getters can be merged by
+/// the optimiser, which made their key paths equal and crashed `sortColumns`.
 struct CardRef: Identifiable, Hashable {
     let id: Int64
-    var front: Int64 { id }
-    var deck: Int64 { id }
-    var due: Int64 { id }
-    var interval: Int64 { id }
-    var ease: Int64 { id }
-    var noteType: Int64 { id }
-    var cardName: Int64 { id }
-    var added: Int64 { id }
+    let front: Int64
+    let deck: Int64
+    let due: Int64
+    let interval: Int64
+    let ease: Int64
+    let noteType: Int64
+    let cardName: Int64
+    let added: Int64
+
+    init(_ id: Int64) {
+        self.id = id
+        front = id; deck = id; due = id; interval = id
+        ease = id; noteType = id; cardName = id; added = id
+    }
 
     static let sortColumns: [PartialKeyPath<CardRef>: BrowseColumn] = [
         \CardRef.front: .front, \CardRef.deck: .deck, \CardRef.due: .due,

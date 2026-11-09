@@ -1,4 +1,6 @@
+#if os(macOS)
 import AppKit
+#endif
 import Observation
 import SwiftUI
 

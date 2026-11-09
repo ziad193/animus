@@ -16,7 +16,13 @@ private struct HelpTopic: Identifiable, Hashable {
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
-private let topics: [HelpTopic] = [
+#if os(iOS)
+private let topics = phoneTopics
+#else
+private let topics = macTopics
+#endif
+
+private let macTopics: [HelpTopic] = [
     HelpTopic(
         id: "start", title: "Getting started", symbol: "sparkles",
         intro: "Animus shows you each card just before you'd forget it. A few minutes every day beats a long session once a week.",
@@ -160,6 +166,62 @@ struct HelpGuideView: View {
         }
     }
 }
+
+/// The same guide for iPhone and iPad: tap and swipe instead of keys and clicks.
+private let phoneTopics: [HelpTopic] = [
+    HelpTopic(
+        id: "start", title: "Getting started", symbol: "sparkles",
+        intro: "Animus shows you each card just before you'd forget it. A few minutes every day beats a long session once a week.",
+        points: [
+            ("Home", "Shows what's waiting today, your decks and your study days. Tap Continue to carry on where you left off."),
+            ("Decks", "Swipe sideways through your decks on Home. Tap one to see its sections, study it, browse its cards or change its options."),
+            ("New, Learning, Review", "Blue cards are new, orange ones you're still learning, green ones are coming back for review."),
+            ("Getting cards", "Make your own with Add Cards, tap Import to open a deck file (.apkg), open one from Files, Mail or AirDrop, or sign in to AnkiWeb to bring over your Anki cards."),
+        ]),
+    HelpTopic(
+        id: "study", title: "Studying", symbol: "graduationcap",
+        intro: "Look at the question, try to remember the answer, then show it and say how it went.",
+        points: [
+            ("Show the answer", "Tap the card or Show Answer."),
+            ("Again, Hard, Good, Easy", "Tap how well you remembered. Each button shows when you'll see the card next."),
+            ("Changed your mind?", "The arrow at the top right undoes your last answer."),
+            ("Under the card", "Edit fixes a typo, Mark stars a card, Flag colour-codes it, Bury hides it until tomorrow and Suspend puts it away until you bring it back in Browse."),
+            ("Finish", "Tap Done at any time. Your progress is saved as you go."),
+        ]),
+    HelpTopic(
+        id: "browse", title: "Finding cards", symbol: "magnifyingglass",
+        intro: "Browse finds any card in your collection.",
+        points: [
+            ("Search", "Type words from the card. The buttons under the search box show just new, due, suspended or flagged cards."),
+            ("Edit", "Tap a card to change its text or tags."),
+            ("Swipe", "Swipe left to suspend or delete a card, right to flag it."),
+            ("Filtered decks", "Tap Filtered Deck on Home to study just some cards, like the ones you keep forgetting, before an exam. They go back to their own decks afterwards."),
+        ]),
+    HelpTopic(
+        id: "decks", title: "Deck options", symbol: "slider.horizontal.3",
+        intro: "Open a deck and tap Options.",
+        points: [
+            ("New cards a day", "How many new cards you meet each day. Start small: 10 to 20 is plenty."),
+            ("Reviews a day", "A daily limit on reviews. Anything over waits until tomorrow."),
+            ("Fit to my memory", "Once you've done a few hundred reviews, Optimise tunes the schedule to how you remember."),
+        ]),
+    HelpTopic(
+        id: "sync", title: "Syncing", symbol: "arrow.triangle.2.circlepath",
+        intro: "Sign in with a free AnkiWeb account to keep this device, Animus on your Mac and Anki everywhere else in step.",
+        points: [
+            ("Sync now", "Tap Sync on Home, or pull Home down."),
+            ("Automatically", "Animus syncs when you open it and after you finish studying."),
+            ("If it goes wrong", "Animus explains any problem in plain English. Your cards on this device stay as they are."),
+        ]),
+    HelpTopic(
+        id: "home", title: "Timers and settings", symbol: "timer",
+        intro: "Make Animus your own.",
+        points: [
+            ("Timers", "Tap Timers at the top of Home or while studying for a Pomodoro or a study timer. Animus can alert you when a break starts or ends, even when it's closed."),
+            ("Stats", "Tap Stats or See all stats. Tap a day on the heatmap to see its numbers."),
+            ("Settings", "The gear at the top of Home: your name, theme, accent colour, background picture, card text size and sync."),
+        ]),
+]
 
 /// Help › Animus Help (⌘?).
 struct HelpGuideCommand: View {

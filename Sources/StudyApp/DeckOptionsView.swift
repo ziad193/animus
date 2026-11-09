@@ -44,7 +44,9 @@ struct DeckOptionsView: View {
             Divider()
             footer
         }
+        #if os(macOS)
         .frame(width: 600, height: 680)
+        #endif
         .task { await load() }
     }
 
@@ -221,7 +223,7 @@ struct DeckOptionsView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(width: 280)
+                    .frame(maxWidth: 280)
                 }
             }
         }
@@ -249,6 +251,18 @@ struct DeckOptionsView: View {
     }
 
     private func row<Control: View>(_ title: String, _ help: String?, @ViewBuilder control: () -> Control) -> some View {
+        #if os(iOS)
+        // A phone is too narrow for words and control side by side: control underneath, on the right.
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let help {
+                    Text(help).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack { Spacer(minLength: 0); control() }
+        }
+        #else
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -259,6 +273,7 @@ struct DeckOptionsView: View {
             Spacer(minLength: 8)
             control()
         }
+        #endif
     }
 
     private func number(_ title: String, _ help: String, _ value: Binding<Int>, _ range: ClosedRange<Int>) -> some View {
@@ -266,6 +281,9 @@ struct DeckOptionsView: View {
             HStack(spacing: 4) {
                 TextField("", value: value, format: .number)
                     .textFieldStyle(.roundedBorder)
+                    #if os(iOS)
+                    .keyboardType(.numberPad)
+                    #endif
                     .multilineTextAlignment(.trailing)
                     .frame(width: 70)
                 Stepper("", value: value, in: range).labelsHidden()

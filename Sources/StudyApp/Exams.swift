@@ -124,8 +124,10 @@ private struct ExamCard: View {
     let deck: Deck?
     let edit: () -> Void
     let study: (Deck) -> Void
+    #if os(macOS)
     @State private var plus = PlusStore.shared
     @State private var planning = false
+    #endif
 
     /// Turns orange in the last fortnight and red in the last three days.
     private var color: Color {
@@ -171,7 +173,8 @@ private struct ExamCard: View {
                 }
             }
             Spacer(minLength: 0)
-            // Animus+ (Animus Dev only until it's ready): a day-by-day plan.
+            // Animus+ (Animus Dev only until it's ready): a day-by-day plan. Mac only for now.
+            #if os(macOS)
             if plus.showsPreviews && plus.showsPrompts {
                 PlusFeatureButton(feature: .examPlan) { planning = true } label: {
                     Image(systemName: PlusFeature.examPlan.symbol)
@@ -179,6 +182,7 @@ private struct ExamCard: View {
                 .buttonStyle(.hoverable)
                 .sheet(isPresented: $planning) { ExamPlanSheet(exam: exam, deck: deck, study: study) }
             }
+            #endif
             Button(action: edit) {
                 Image(systemName: "pencil")
             }
@@ -237,6 +241,8 @@ private struct ExamEditor: View {
             }
         }
         .padding(24)
+        #if os(macOS)
         .frame(width: 380)
+        #endif
     }
 }

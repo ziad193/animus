@@ -63,12 +63,14 @@ public struct StudyCard: Decodable, Identifiable, Equatable {
     public let typeAnswer: Bool
     /// The deck's auto-advance settings, when it uses them.
     public let autoAdvance: AutoAdvance?
+    /// "new", "learning", "review" or "relearning".
+    public let state: String
 
     enum CodingKeys: String, CodingKey {
         case id, question, answer, css, intervals, upcoming, occlusion, flag, marked
         case questionAudio = "question_audio"
         case answerAudio = "answer_audio"
-        case typeAnswer = "type_answer", autoAdvance = "auto_advance"
+        case typeAnswer = "type_answer", autoAdvance = "auto_advance", state
     }
 
     public init(from decoder: Decoder) throws {
@@ -86,6 +88,7 @@ public struct StudyCard: Decodable, Identifiable, Equatable {
         marked = try c.decode(Bool.self, forKey: .marked)
         typeAnswer = try c.decodeIfPresent(Bool.self, forKey: .typeAnswer) ?? false
         autoAdvance = try c.decodeIfPresent(AutoAdvance.self, forKey: .autoAdvance)
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? "review"
     }
 }
 

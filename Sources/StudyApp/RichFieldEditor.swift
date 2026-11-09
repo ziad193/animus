@@ -94,7 +94,7 @@ struct RichFieldEditor: NSViewRepresentable {
         let config = WKWebViewConfiguration()
         config.setURLSchemeHandler(MediaSchemeHandler(folder: Library.mediaFolder), forURLScheme: "study-media")
         config.userContentController.add(WeakMessageHandler(context.coordinator), name: "field")
-        let view = WKWebView(frame: .zero, configuration: config)
+        let view = FieldWebView(frame: .zero, configuration: config)
         view.setValue(false, forKey: "drawsBackground")
         view.navigationDelegate = context.coordinator
         context.coordinator.webView = view
@@ -180,6 +180,7 @@ struct RichFieldEditor: NSViewRepresentable {
                 }
             case "height":
                 if let value = body["value"] as? Double {
+                    (webView as? FieldWebView)?.contentHeight = CGFloat(value)
                     let height = max(44, min(CGFloat(value), 600))
                     if abs((parent?.height ?? 0) - height) > 1 { parent?.height = height }
                 }
@@ -290,5 +291,21 @@ private final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
     init(_ target: any WKScriptMessageHandler) { self.target = target }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         target?.userContentController(controller, didReceive: message)
+    }
+}
+
+
+/// A field's editor grows to fit its text, so it has nothing of its own to
+/// scroll: the mouse wheel goes to the page around it instead of getting stuck.
+/// Only a very long field (taller than the 600 pt cap) scrolls itself.
+final class FieldWebView: WKWebView {
+    var contentHeight: CGFloat = 0
+
+    override func scrollWheel(with event: NSEvent) {
+        if contentHeight <= bounds.height + 2, let outer = enclosingScrollView ?? nextResponder {
+            outer.scrollWheel(with: event)
+        } else {
+            super.scrollWheel(with: event)
+        }
     }
 }

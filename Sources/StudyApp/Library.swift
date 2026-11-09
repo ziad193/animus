@@ -249,6 +249,13 @@ final class Library {
         await open()
     }
 
+    /// Every top-level deck (sections inside), or none while loading.
+    /// The iPhone/iPad app's Library has the same, so shared screens can ask either.
+    var deckList: [Deck] {
+        if case .ready(let decks) = state { return decks }
+        return []
+    }
+
     var isReady: Bool {
         if case .ready = state { return true }
         return false

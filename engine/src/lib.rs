@@ -240,6 +240,8 @@ struct CardJson {
     type_answer: bool,
     /// The deck's auto-advance settings, if it uses them.
     auto_advance: Option<AutoAdvanceJson>,
+    /// "new", "learning", "review" or "relearning".
+    state: &'static str,
 }
 
 #[derive(Serialize)]
@@ -391,7 +393,14 @@ fn next_card(inner: &mut Inner) -> anki::error::Result<StudyCardJson> {
     });
 
     let occlusion = occlusion_fields(&mut inner.col, next.card.id());
-    let flag = anki_proto::cards::Card::from(next.card.clone()).flags & 0b111;
+    let proto = anki_proto::cards::Card::from(next.card.clone());
+    let flag = proto.flags & 0b111;
+    let state = match proto.ctype {
+        0 => "new",
+        1 => "learning",
+        3 => "relearning",
+        _ => "review",
+    };
     let marked = inner
         .col
         .storage
@@ -412,6 +421,7 @@ fn next_card(inner: &mut Inner) -> anki::error::Result<StudyCardJson> {
         marked,
         type_answer,
         auto_advance,
+        state,
     };
     inner.current = Some((next.card.id(), next.states));
     Ok(StudyCardJson { card: Some(card), counts })

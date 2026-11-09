@@ -123,7 +123,10 @@ struct DecksView: View {
                         switch route {
                         case .deck(let id):
                             if let deck = Deck.find(id, in: decks) {
+                                // Its own solid background: the page it opened from stays
+                                // underneath, and would show through a see-through one.
                                 DeckPage(deck: deck, open: open, study: study, browse: browseDeck)
+                                    .screenBackground(plain: Color(nsColor: .windowBackgroundColor))
                             }
                         case .study(let id):
                             if let deck = Deck.find(id, in: decks) {
@@ -951,90 +954,6 @@ private struct DeckTile: View {
     }
 }
 
-/// A thin bar showing today's mix of new, learning and review cards.
-private struct DueBar: View {
-    let deck: Deck
-
-    var body: some View {
-        let total = max(1, Double(deck.dueToday))
-        GeometryReader { geo in
-            HStack(spacing: 2) {
-                if deck.dueToday == 0 {
-                    Capsule().fill(Color.green.opacity(0.35))
-                } else {
-                    segment(deck.newCount, Palette.new, total, geo.size.width)
-                    segment(deck.learnCount, Palette.learning, total, geo.size.width)
-                    segment(deck.reviewCount, Palette.review, total, geo.size.width)
-                }
-            }
-        }
-        .frame(height: 5)
-        .clipShape(Capsule())
-    }
-
-    @ViewBuilder
-    private func segment(_ value: UInt32, _ color: Color, _ total: Double, _ width: CGFloat) -> some View {
-        if value > 0 {
-            Capsule().fill(color).frame(width: max(4, width * Double(value) / total))
-        }
-    }
-}
-
-/// Today's New / Learning / Due counts as three small coloured bubbles.
-/// Zeros are hidden in compact mode (the sidebar) and faded otherwise.
-struct CountPills: View {
-    let deck: Deck
-    let compact: Bool
-
-    var body: some View {
-        HStack(spacing: compact ? 3 : 4) {
-            pill(deck.newCount, Palette.new, "New")
-            pill(deck.learnCount, Palette.learning, "Learning")
-            pill(deck.reviewCount, Palette.review, "Due")
-        }
-    }
-
-    @ViewBuilder
-    private func pill(_ value: UInt32, _ color: Color, _ label: String) -> some View {
-        if !(compact && value == 0) {
-            Text(Self.short(value))
-                .font((compact ? Font.caption2 : .caption).weight(.semibold).monospacedDigit())
-                .padding(.horizontal, compact ? 5 : 7)
-                .padding(.vertical, compact ? 1 : 3)
-                .background(Capsule().fill(color.opacity(value == 0 ? 0.06 : 0.16)))
-                .foregroundStyle(value == 0 ? Color.secondary.opacity(0.6) : color)
-                .tip("\(value) \(label.lowercased())")
-        }
-    }
-
-    /// 5,827 → "5.8k" so bubbles stay small.
-    static func short(_ value: UInt32) -> String {
-        value >= 1000 ? String(format: "%.1fk", Double(value) / 1000) : "\(value)"
-    }
-}
-
-/// A coloured rounded square with the deck's first letter.
-struct DeckIcon: View {
-    let deck: Deck
-    let size: CGFloat
-
-    private static let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .indigo, .mint, .red, .cyan]
-
-    var color: Color { Self.colors[Int(UInt64(bitPattern: deck.id) % UInt64(Self.colors.count))] }
-
-    var body: some View {
-        let letter = deck.initials
-        RoundedRectangle(cornerRadius: size * 0.28)
-            .fill(color.gradient)
-            .frame(width: size, height: size)
-            .overlay(
-                Text(letter)
-                    .font(.system(size: size * (letter.count > 1 ? 0.4 : 0.5), weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-            )
-    }
-}
-
 /// New / Learning / Review counts as three soft tiles.
 private struct DueSummary: View {
     let new: UInt32
@@ -1052,44 +971,6 @@ private struct DueSummary: View {
 }
 
 // MARK: - Helpers
-
-extension Deck {
-    /// The last part of the name, e.g. "Week 1" for "BB::Week 1".
-    var shortName: String { path.last ?? name }
-    var path: [String] { name.components(separatedBy: "::") }
-
-    /// One or two characters for the deck's icon: "W1" for "Week 1",
-    /// "BG" for "Basal Ganglia…", "C" for "Cancer".
-    var initials: String {
-        let words = shortName
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-        guard let first = words.first?.first else { return "•" }
-        if let second = words.dropFirst().first?.first, words.count > 1 {
-            return (String(first) + String(second)).uppercased()
-        }
-        // A single word: keep a leading number together ("1.CRD" → "1C").
-        return String(first).uppercased()
-    }
-
-    /// e.g. "4 sections · 291 cards".
-    var summary: String {
-        let cards = totalCards == 1 ? "1 card" : "\(totalCards) cards"
-        switch children.count {
-        case 0: return cards
-        case 1: return "1 section · \(cards)"
-        default: return "\(children.count) sections · \(cards)"
-        }
-    }
-
-    static func find(_ id: Int64, in decks: [Deck]) -> Deck? {
-        for deck in decks {
-            if deck.id == id { return deck }
-            if let found = find(id, in: deck.children) { return found }
-        }
-        return nil
-    }
-}
 
 /// The frosted background macOS uses behind sidebars.
 private struct SidebarMaterial: NSViewRepresentable {

@@ -1,4 +1,9 @@
+#if os(macOS)
 import AppKit
+#else
+import AudioToolbox
+import UserNotifications
+#endif
 import Observation
 import SwiftUI
 
@@ -86,6 +91,9 @@ final class Pomodoro {
         guard !isRunning else { return }
         isRunning = true
         endDate = Date().addingTimeInterval(remaining)
+        #if os(iOS)
+        PhaseAlert.schedule(after: remaining, phase: phase)
+        #endif
         ticker = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(250))
@@ -99,6 +107,9 @@ final class Pomodoro {
         tick()
         isRunning = false
         endDate = nil
+        #if os(iOS)
+        PhaseAlert.cancel()
+        #endif
         ticker?.cancel()
         ticker = nil
     }
@@ -140,7 +151,11 @@ final class Pomodoro {
         }
         remaining = Self.length(of: phase)
         if playSound, setting(PomodoroPref.sound, default: true) {
+            #if os(macOS)
             NSSound(named: phase.isBreak ? "Glass" : "Hero")?.play()
+            #else
+            AudioServicesPlaySystemSound(phase.isBreak ? 1025 : 1005)
+            #endif
         }
         let auto = phase.isBreak
             ? setting(PomodoroPref.autoBreaks, default: true)
@@ -148,6 +163,31 @@ final class Pomodoro {
         if auto && (wasRunning || playSound) { start() }
     }
 }
+
+#if os(iOS)
+/// On iPhone and iPad the app may be closed when a phase ends, so the phone
+/// shows an alert instead (asked for the first time the timer starts).
+enum PhaseAlert {
+    private static let id = "animus.pomodoro"
+
+    static func schedule(after seconds: TimeInterval, phase: Pomodoro.Phase) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = phase.isBreak ? "Break's over" : "Time for a break"
+            content.body = phase.isBreak ? "Back to your cards when you're ready." : "Nice focus. Take a few minutes off."
+            content.sound = .default
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, seconds), repeats: false)
+            center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
+        }
+    }
+
+    static func cancel() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+    }
+}
+#endif
 
 enum PomodoroPref {
     static let focus = "pomodoro.focus"

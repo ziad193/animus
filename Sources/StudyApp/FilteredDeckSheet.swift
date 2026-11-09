@@ -60,10 +60,7 @@ struct FilteredDeckSheet: View {
     @State private var error: String?
     @State private var working = false
 
-    private var decks: [Deck] {
-        if case .ready(let decks) = library.state { return decks }
-        return []
-    }
+    private var decks: [Deck] { library.deckList }
 
     /// The Anki search the choices above add up to.
     private var search: String {
@@ -171,7 +168,9 @@ struct FilteredDeckSheet: View {
             }
         }
         .padding(24)
+        #if os(macOS)
         .frame(width: 560)
+        #endif
         .onAppear { deckID = startDeck }
         .task(id: search) { await count() }
     }

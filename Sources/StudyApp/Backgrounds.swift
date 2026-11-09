@@ -1,4 +1,11 @@
+#if os(macOS)
 import AppKit
+/// NSImage on Mac, UIImage on iPhone and iPad.
+typealias PlatformImage = NSImage
+#else
+import UIKit
+typealias PlatformImage = UIImage
+#endif
 import CryptoKit
 import Observation
 import SwiftUI
@@ -11,10 +18,39 @@ import SwiftUI
 enum AppBackground: String, CaseIterable, Identifiable {
     case none
     case aurora, sunset, lagoon
-    case wave, wheat, andes, oxbow, rockies, earthset
+    // Art
+    case wave, wheat, andes, oxbow, rockies
+    case ninthWave, yosemiteSunrise, cairnSnow, wheatstacks, sainteAdresse, turnerSunrise, friedrichSummer, waterLilies
+    // Space
+    case earthset, orbitSunset, devilsTower, cosmicCliffs, saturn, joshuaTree, queenValley
+    // Nature
+    case tetons, tetonsCloud, capeRoyal, vishnuTemple, lavaSea, oolahValley
 
     static let key = "background"
     var id: String { rawValue }
+
+    /// The sections of the picker.
+    enum Group: String, CaseIterable, Identifiable {
+        case colours, art, space, nature
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .colours: "Colours"
+            case .art: "Art"
+            case .space: "Space and night skies"
+            case .nature: "Nature"
+            }
+        }
+    }
+
+    var group: Group {
+        switch self {
+        case .none, .aurora, .sunset, .lagoon: .colours
+        case .earthset, .orbitSunset, .devilsTower, .cosmicCliffs, .saturn, .joshuaTree, .queenValley: .space
+        case .tetons, .tetonsCloud, .capeRoyal, .vishnuTemple, .lavaSea, .oolahValley: .nature
+        default: .art
+        }
+    }
 
     var title: String {
         switch self {
@@ -27,7 +63,27 @@ enum AppBackground: String, CaseIterable, Identifiable {
         case .andes: "The Andes"
         case .oxbow: "The Oxbow"
         case .rockies: "Rocky Mountains"
+        case .ninthWave: "The Ninth Wave"
+        case .yosemiteSunrise: "Yosemite Sunrise"
+        case .cairnSnow: "Cairn in Snow"
+        case .wheatstacks: "Wheatstacks"
+        case .sainteAdresse: "Sainte-Adresse"
+        case .turnerSunrise: "Rising Sun"
+        case .friedrichSummer: "Summer"
+        case .waterLilies: "Water Lilies"
         case .earthset: "Earthset"
+        case .orbitSunset: "Orbit Sunset"
+        case .devilsTower: "Devils Tower"
+        case .cosmicCliffs: "Cosmic Cliffs"
+        case .saturn: "Saturn"
+        case .joshuaTree: "Joshua Tree"
+        case .queenValley: "Queen Valley"
+        case .tetons: "The Tetons"
+        case .tetonsCloud: "Teton Clouds"
+        case .capeRoyal: "Cape Royal"
+        case .vishnuTemple: "Vishnu Temple"
+        case .lavaSea: "Lava and Sea"
+        case .oolahValley: "Oolah Valley"
         }
     }
 
@@ -40,16 +96,31 @@ enum AppBackground: String, CaseIterable, Identifiable {
         case .andes: "Frederic Edwin Church, Heart of the Andes, 1859. The Met, public domain."
         case .oxbow: "Thomas Cole, The Oxbow, 1836. The Met, public domain."
         case .rockies: "Albert Bierstadt, The Rocky Mountains, Lander's Peak, 1863. The Met, public domain."
+        case .ninthWave: "Ivan Aivazovsky, The Ninth Wave, 1850. State Russian Museum, public domain."
+        case .yosemiteSunrise: "Albert Bierstadt, Sunrise, Yosemite Valley, about 1870. Public domain."
+        case .cairnSnow: "Caspar David Friedrich, Cairn in Snow, 1807. Public domain."
+        case .wheatstacks: "Claude Monet, Stacks of Wheat (Sunset, Snow Effect), 1890–91. Art Institute of Chicago, public domain."
+        case .sainteAdresse: "Claude Monet, The Beach at Sainte-Adresse, 1867. Art Institute of Chicago, public domain."
+        case .turnerSunrise: "J. M. W. Turner, Sun Rising through Vapour, 1807. Public domain."
+        case .friedrichSummer: "Caspar David Friedrich, Summer, 1807. Public domain."
+        case .waterLilies: "Claude Monet, Water Lilies, 1919. The Met, public domain."
         case .earthset: "Earthset, photographed by the Artemis II crew, April 2026. NASA."
+        case .orbitSunset: "Sunset over the South Atlantic, photographed from the International Space Station, 2016. NASA."
+        case .devilsTower: "The Milky Way over Devils Tower, Wyoming. Damon Joyce, National Park Service."
+        case .cosmicCliffs: "The Cosmic Cliffs of the Carina Nebula, James Webb Space Telescope, 2022. NASA, ESA, CSA, STScI."
+        case .saturn: "Saturn, a mosaic from the Cassini spacecraft, 2004. NASA/JPL/Space Science Institute."
+        case .joshuaTree: "Night sky over Joshua Tree National Park, California. Brad Sutton, National Park Service."
+        case .queenValley: "The Milky Way and Jupiter over Queen Valley, Joshua Tree. Emily Hassell, National Park Service."
+        case .tetons: "Grand Teton National Park, Wyoming. David Restivo, National Park Service."
+        case .tetonsCloud: "Sunrise in Grand Teton National Park. David Restivo, National Park Service."
+        case .capeRoyal: "Sunrise from Cape Royal, Grand Canyon. National Park Service."
+        case .vishnuTemple: "Vishnu Temple at sunrise, Grand Canyon. National Park Service."
+        case .lavaSea: "Lava pouring into the sea at Kamokuna, Hawaiʻi Volcanoes National Park, 2017. Janice Wei, National Park Service."
+        case .oolahValley: "Oolah Valley, Gates of the Arctic, Alaska. National Park Service."
         }
     }
 
-    var isPicture: Bool {
-        switch self {
-        case .none, .aurora, .sunset, .lagoon: false
-        default: true
-        }
-    }
+    var isPicture: Bool { group != .colours }
 
     static var gradients: [AppBackground] { [.aurora, .sunset, .lagoon] }
     static var pictures: [AppBackground] { allCases.filter(\.isPicture) }
@@ -57,37 +128,59 @@ enum AppBackground: String, CaseIterable, Identifiable {
     // MARK: Pictures
 
     /// The full pictures aren't inside the app: each one downloads the first
-    /// time you pick it, and Settings can remove them all to free the space.
+    /// time you pick it, and Settings can remove any of them to free the space.
     /// The checksum makes sure the file is exactly the one we published.
     var download: (url: URL, sha256: String, bytes: Int)? {
+        guard let file = Self.files[rawValue] else { return nil }
         let base = "https://raw.githubusercontent.com/ziad193/animus/main/Resources/backgrounds/"
-        func d(_ sha: String, _ bytes: Int) -> (URL, String, Int) { (URL(string: base + rawValue + ".jpg")!, sha, bytes) }
-        switch self {
-        case .wave: return d("1fee975eda170ba3a5eef69cae20447ffaca6b6cb96f9b58dd3800b6650f96f6", 2_853_141)
-        case .wheat: return d("5ff46fdb21cfa0d004aeaafb836a9feb26a834731be354fb9f6571aeaf3adea5", 5_298_907)
-        case .andes: return d("7d0d4846b0abd13d3789c50a3225601214bd1570d18a695e1ec2e457f24fcaea", 2_706_225)
-        case .oxbow: return d("5df162b16131e3824d4cada560e2efb405faea920c0a4a415127e16b90a32166", 2_380_846)
-        case .rockies: return d("1d6d8bd5f8b1f69360e0b936eacda8163124eaf7ceaea1362b76aa2dfbdd37e1", 1_856_864)
-        case .earthset: return d("69eb920eeb20b7c8a3c9a9e62fbfec6606c624492994867be3f6f564b6f3154b", 1_181_840)
-        default: return nil
-        }
+        return (URL(string: base + rawValue + ".jpg")!, file.sha, file.bytes)
     }
+
+    /// Each picture's checksum and size, as published.
+    private static let files: [String: (sha: String, bytes: Int)] = [
+        "wave": ("1fee975eda170ba3a5eef69cae20447ffaca6b6cb96f9b58dd3800b6650f96f6", 2_853_141),
+        "wheat": ("5ff46fdb21cfa0d004aeaafb836a9feb26a834731be354fb9f6571aeaf3adea5", 5_298_907),
+        "andes": ("7d0d4846b0abd13d3789c50a3225601214bd1570d18a695e1ec2e457f24fcaea", 2_706_225),
+        "oxbow": ("5df162b16131e3824d4cada560e2efb405faea920c0a4a415127e16b90a32166", 2_380_846),
+        "rockies": ("1d6d8bd5f8b1f69360e0b936eacda8163124eaf7ceaea1362b76aa2dfbdd37e1", 1_856_864),
+        "earthset": ("69eb920eeb20b7c8a3c9a9e62fbfec6606c624492994867be3f6f564b6f3154b", 1_181_840),
+        "ninthWave": ("56062f00ced20800a0cf5c95ac835d3bcfcc6b636287b2401eb6739c78a07771", 2_318_862),
+        "yosemiteSunrise": ("6632eb6a3440e2fe6dcf4d114123d7b094dd8e42f56045c4df683ae016a0034f", 2_967_860),
+        "cairnSnow": ("d18caefd74dd85a246d2638791a26a993ca55509aa66bfa18ac866e90e171350", 3_718_966),
+        "wheatstacks": ("72b48a84f9b051c9d23efa0b106703c753df87e5fb18667b73f1a8d242f77275", 3_727_024),
+        "sainteAdresse": ("4332e869cd776e4fcab51adb2efc7d7f84db01fa1b76d9382237113222379e42", 4_034_445),
+        "turnerSunrise": ("97a8b6e972b45fda2b6f6898844e37fbf12198a74359b70ad5ba23a122acb946", 2_112_456),
+        "friedrichSummer": ("af4bd33068675f7980a6b202170bbb5b4e159d53bafee0ebd9f082a60ef387d4", 3_707_327),
+        "waterLilies": ("22ab256e4a730eac1c63674bbb51dc23ae394a0bb2888df0d898378999922a15", 2_290_878),
+        "orbitSunset": ("6c7f21cb4d123c4e912ad8c58ffb8263f5680def75d770a8478d247461157a59", 3_631_938),
+        "devilsTower": ("1ffdcc5fc1900c9c8e2611d02dd49d024d56f88d07627c93e0fbae6fc863ecb3", 2_698_022),
+        "cosmicCliffs": ("ec847552da3c10d5c3dabef0d709b8c973055ce9900c57376b331a122d0279f3", 1_761_756),
+        "saturn": ("0ff663ec137213bfb888b98c4c0d8500a66314c9a4898dd389904bd043170611", 278_317),
+        "joshuaTree": ("1a1da18bf9c91f7c7a82254184f619cda7cfbe72bd049f35b3a6980359ab3981", 2_767_692),
+        "queenValley": ("a8d863efcaac479807a680bdbfacd88c934bc11fca41befcc6d8173f75521665", 2_616_445),
+        "tetons": ("e5562f79d39228dd1a9bce1f1812951f8da357df411db0058b49e406db5f4c7b", 3_966_983),
+        "tetonsCloud": ("0d92109eb7bb0fb0e1c0eea879aca7b60258dceb6714ae968a9c6c75ab57a394", 2_524_720),
+        "capeRoyal": ("d854d409c5166c6f95039f5aeaeb49524b4a3336f0a7ea6b68c8cc6240448a5c", 2_921_100),
+        "vishnuTemple": ("a48627f082dd1cd118e0c4d4e2159e31bbe58387e31cf06ccb3ecefbcd5f1957", 2_006_308),
+        "lavaSea": ("164b3145d0e2a172e541c44e240914853a092c65bb86c960d6cb62867b37b5d7", 1_555_921),
+        "oolahValley": ("53d237f6d4e1e840637ce2c19738f43776f0512564ef27d7cb24f7878e6e422a", 1_631_756),
+    ]
 
     /// Where a downloaded picture is kept.
     var fileURL: URL { BackgroundStore.folder.appendingPathComponent("\(rawValue).jpg") }
 
-    @MainActor private static var cache: [String: NSImage] = [:]
+    @MainActor private static var cache: [String: PlatformImage] = [:]
 
     /// The full picture (once downloaded), or the small one for the picker
     /// (always there: it comes with the app).
-    @MainActor func image(thumbnail: Bool = false) -> NSImage? {
+    @MainActor func image(thumbnail: Bool = false) -> PlatformImage? {
         guard isPicture else { return nil }
         let key = thumbnail ? "\(rawValue)-thumb" : rawValue
         if let hit = Self.cache[key] { return hit }
         let url = thumbnail
             ? Bundle.main.resourceURL?.appendingPathComponent("backgrounds/\(rawValue)-thumb.jpg")
             : fileURL
-        guard let url, let image = NSImage(contentsOf: url) else { return nil }
+        guard let url, let image = PlatformImage(contentsOfFile: url.path) else { return nil }
         // Keep only the one full-size picture in use; thumbnails are small.
         if !thumbnail { Self.cache = Self.cache.filter { $0.key.hasSuffix("-thumb") } }
         Self.cache[key] = image
@@ -167,6 +260,14 @@ final class BackgroundStore {
         }
     }
 
+    /// Deletes one downloaded picture. If it was in use, the background
+    /// goes back to plain until it's downloaded again.
+    func remove(_ picture: AppBackground) {
+        try? FileManager.default.removeItem(at: picture.fileURL)
+        AppBackground.forgetFullPictures()
+        generation += 1
+    }
+
     /// Deletes every downloaded picture. Backgrounds go back to plain until
     /// you pick one again.
     func removeAll() {
@@ -233,7 +334,7 @@ struct BackgroundFill: View {
                 if let image = background.image() {
                     Color.clear
                         .overlay {
-                            Image(nsImage: image)
+                            Image(platformImage: image)
                                 .resizable()
                                 .interpolation(.high)
                                 .aspectRatio(contentMode: .fill)
@@ -425,6 +526,7 @@ struct BackgroundPicker: View {
     @AppStorage(BackgroundStyle.key) private var style = BackgroundStyle.banner
     @State private var store = BackgroundStore.shared
     @State private var confirmingRemove = false
+    @State private var removing: AppBackground?
 
     private let columns = [GridItem(.adaptive(minimum: 104, maximum: 120), spacing: 12)]
 
@@ -443,12 +545,22 @@ struct BackgroundPicker: View {
                  : "Behind Home and while you study. Each picture downloads the first time you pick it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                ForEach(AppBackground.allCases.filter(\.isOffered)) { option in
-                    Tile(option: option,
-                         selected: background == option && option.isReady,
-                         downloading: store.downloading.contains(option)) {
-                        choose(option)
+            ForEach(AppBackground.Group.allCases) { group in
+                let options = AppBackground.allCases.filter { $0.group == group && $0.isOffered }
+                if !options.isEmpty {
+                    Text(group.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 6)
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                        ForEach(options) { option in
+                            Tile(option: option,
+                                 selected: background == option && option.isReady,
+                                 downloading: store.downloading.contains(option),
+                                 remove: { removing = option }) {
+                                choose(option)
+                            }
+                        }
                     }
                 }
             }
@@ -474,6 +586,14 @@ struct BackgroundPicker: View {
                 }
             }
         }
+        .confirmationDialog("Delete “\(removing?.title ?? "")”?",
+                            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            Button("Delete Picture", role: .destructive) {
+                if let removing { store.remove(removing) }
+            }
+        } message: {
+            Text("This frees up \(ByteCountFormatter.string(fromByteCount: Int64(removing?.download?.bytes ?? 0), countStyle: .file)). You can download it again any time\(removing == background ? "; until then the background is plain" : "").")
+        }
         .confirmationDialog("Remove the downloaded pictures?", isPresented: $confirmingRemove) {
             Button("Remove Pictures", role: .destructive) { store.removeAll() }
         } message: {
@@ -495,6 +615,7 @@ struct BackgroundPicker: View {
         let option: AppBackground
         let selected: Bool
         let downloading: Bool
+        let remove: () -> Void
         let action: () -> Void
 
         var body: some View {
@@ -520,6 +641,20 @@ struct BackgroundPicker: View {
             .disabled(downloading)
             .hoverLift(scale: 1.03)
             .tip(option.isReady ? (option.credit ?? option.title) : "Download \(option.title) (\(size))")
+            // Downloaded pictures can be deleted one at a time to save space.
+            .overlay(alignment: .topTrailing) {
+                if option.isPicture && option.isReady {
+                    Button(action: remove) {
+                        Image(systemName: "trash.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .black.opacity(0.55))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(4)
+                    .tip("Delete this picture (\(size)) to save space")
+                }
+            }
         }
 
         private var size: String {
@@ -542,14 +677,28 @@ struct BackgroundPicker: View {
         @ViewBuilder private var preview: some View {
             if option == .none {
                 ZStack {
+                    #if os(macOS)
                     Color(nsColor: .windowBackgroundColor)
+                    #else
+                    Color(uiColor: .systemBackground)
+                    #endif
                     Image(systemName: "nosign").font(.title2).foregroundStyle(.secondary)
                 }
             } else if let thumb = option.image(thumbnail: true) {
-                Image(nsImage: thumb).resizable().aspectRatio(contentMode: .fill)
+                Image(platformImage: thumb).resizable().aspectRatio(contentMode: .fill)
             } else {
                 BackgroundFill(background: option)
             }
         }
+    }
+}
+
+extension Image {
+    init(platformImage: PlatformImage) {
+        #if os(macOS)
+        self.init(nsImage: platformImage)
+        #else
+        self.init(uiImage: platformImage)
+        #endif
     }
 }

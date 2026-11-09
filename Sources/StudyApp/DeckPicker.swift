@@ -17,21 +17,6 @@ enum RecentDecks {
     }
 }
 
-extension Deck {
-    /// Every deck, parents before their sections, in the usual order.
-    static func flatten(_ decks: [Deck]) -> [Deck] {
-        decks.flatMap { [$0] + flatten($0.children) }
-    }
-
-    /// This deck's id and all of its sections' ids.
-    var idsIncludingSections: [Int64] {
-        [id] + children.flatMap(\.idsIncludingSections)
-    }
-
-    /// "BB › Week 1 › Basal Ganglia".
-    var displayPath: String { path.joined(separator: " › ") }
-}
-
 /// A button showing the chosen deck. Clicking it opens a list you can type
 /// into to find a deck, instead of scrolling a long menu.
 struct DeckPickerButton: View {

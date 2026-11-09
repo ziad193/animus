@@ -5,7 +5,7 @@ import Foundation
 import StudyCore
 
 let args = CommandLine.arguments
-guard args.count == 2 || (args.count == 4 && args[2] == "study") || (args.count == 3 && ["stats", "add-test"].contains(args[2])) || (args.count == 4 && args[2] == "import") || (args.count >= 3 && args[2] == "browse") || (args.count == 3 && args[2] == "deckmenu") || (args.count == 3 && args[2] == "stocktypes") || (args.count == 3 && args[2] == "filtered") || (args.count == 3 && args[2] == "backuptest") || (args.count == 3 && args[2] == "actions") || (args.count == 3 && args[2] == "bulk") || (args.count == 3 && args[2] == "gaps") || (args.count == 3 && args[2] == "stats2") || (args.count == 3 && args[2] == "types") || (args.count == 3 && args[2] == "fsrsundo") || (args.count == 4 && args[2] == "house") || (args.count == 4 && args[2] == "occlusion") || (args.count == 5 && args[2] == "synctest") || (args.count == 3 && args[1] == "synclogin") else {
+guard args.count == 2 || (args.count == 4 && args[2] == "study") || (args.count == 3 && ["stats", "add-test"].contains(args[2])) || (args.count == 4 && args[2] == "import") || (args.count >= 3 && args[2] == "browse") || (args.count == 3 && args[2] == "deckmenu") || (args.count == 3 && args[2] == "stocktypes") || (args.count == 3 && args[2] == "filtered") || (args.count == 3 && args[2] == "backuptest") || (args.count == 3 && args[2] == "actions") || (args.count == 3 && args[2] == "bulk") || (args.count == 3 && args[2] == "gaps") || (args.count == 3 && args[2] == "stats2") || (args.count == 3 && args[2] == "types") || (args.count == 3 && args[2] == "fsrsundo") || (args.count == 4 && args[2] == "house") || (args.count == 4 && args[2] == "occlusion") || (args.count == 5 && args[2] == "synctest") || (args.count == 3 && args[1] == "synclogin") || (args.count == 4 && args[2] == "mkdeck") else {
     print("usage: study-cli <collection.anki2> [study <deck id>]")
     exit(2)
 }
@@ -83,6 +83,15 @@ do {
         let again = try await engine.deckOptions(deck).settings
         print("easy days after:", again.easyDays, "auto:", again.autoQuestionSeconds, again.autoAnswerSeconds, again.autoAnswerAction)
         if let next = try await engine.nextCard().card { print("next card autoAdvance:", String(describing: next.autoAdvance)) }
+    } else if args[2] == "mkdeck" {
+        // mkdeck "Name": a deck with three basic cards (for trying layouts).
+        let deck = try await engine.addDeck(named: args[3])
+        let basic = try await engine.noteTypes().first { $0.kind == "basic" }!
+        for n in 1...3 {
+            try await engine.addNote(noteType: basic.id, deck: deck,
+                                     fields: ["\(args[3]) question \(n)", "Answer \(n)"] + Array(repeating: "", count: max(0, basic.fields.count - 2)))
+        }
+        show(try await engine.decks())
     } else if args[2] == "add-test" {
         let types = try await engine.noteTypes()
         print("card types:", types.map { "\($0.name) [\($0.kind)] \($0.fields)" })

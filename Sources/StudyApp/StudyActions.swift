@@ -461,10 +461,5 @@ struct CardInfoSheet: View {
         Date(timeIntervalSince1970: TimeInterval(seconds)).formatted(date: .abbreviated, time: .omitted)
     }
 
-    static func days(_ d: Double) -> String {
-        if d < 1 { return "\(max(1, Int((d * 24 * 60).rounded()))) min" }
-        if d < 31 { return "\(Int(d.rounded())) day\(Int(d.rounded()) == 1 ? "" : "s")" }
-        if d < 365 { return String(format: "%.1f months", d / 30.4) }
-        return String(format: "%.1f years", d / 365)
-    }
+    static func days(_ d: Double) -> String { IntervalText.days(d) }
 }

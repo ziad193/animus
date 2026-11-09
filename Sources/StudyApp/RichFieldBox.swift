@@ -212,31 +212,3 @@ final class VoiceRecorder {
     }
 }
 
-/// Turning field HTML into text for previews and checks.
-enum HTMLText {
-    /// Plain text, roughly as it reads on the card ("[picture]" for images).
-    static func plain(_ html: String) -> String {
-        var text = html
-        text = text.replacingOccurrences(of: #"<br\s*/?>|</div>|</p>|</li>"#, with: "\n", options: [.regularExpression, .caseInsensitive])
-        text = text.replacingOccurrences(of: #"<img[^>]*>"#, with: "[picture]", options: [.regularExpression, .caseInsensitive])
-        text = text.replacingOccurrences(of: #"\[sound:[^\]]+\]"#, with: "🔊", options: .regularExpression)
-        text = text.replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
-        for (entity, char) in [("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", "\""), ("&#39;", "'"), ("&amp;", "&")] {
-            text = text.replacingOccurrences(of: entity, with: char)
-        }
-        return text.trimmingCharacters(in: .newlines)
-    }
-
-    static func hasMedia(_ html: String) -> Bool {
-        html.range(of: "<img", options: .caseInsensitive) != nil || html.contains("[sound:")
-    }
-
-    /// Small clean-ups before saving: no trailing empty lines from the editor.
-    static func tidy(_ html: String) -> String {
-        var out = html.trimmingCharacters(in: .whitespacesAndNewlines)
-        while let range = out.range(of: #"(<br\s*/?>|<div><br\s*/?></div>)$"#, options: [.regularExpression, .caseInsensitive]) {
-            out.removeSubrange(range)
-        }
-        return out
-    }
-}

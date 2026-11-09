@@ -1,4 +1,8 @@
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import SwiftUI
 import StudyCore
 
@@ -221,7 +225,7 @@ struct OcclusionCardView: View {
     let showingAnswer: Bool
     let accent: Color
 
-    @State private var image: NSImage?
+    @State private var image: Image?
     @State private var pulse = false
 
     var body: some View {
@@ -232,7 +236,7 @@ struct OcclusionCardView: View {
                     .multilineTextAlignment(.center)
             }
             if let image {
-                Image(nsImage: image)
+                image
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
@@ -255,7 +259,7 @@ struct OcclusionCardView: View {
         .task(id: card.image) {
             let url = card.image
             let data = await Task.detached { try? Data(contentsOf: url) }.value
-            image = data.flatMap(NSImage.init(data:))
+            image = data.flatMap(Image.init(pictureData:))
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { pulse = true }
@@ -305,5 +309,18 @@ struct OcclusionCardView: View {
             path.closeSubpath()
             return path
         }
+    }
+}
+
+extension Image {
+    /// A picture from file data, on Mac, iPhone and iPad.
+    init?(pictureData data: Data) {
+        #if os(macOS)
+        guard let picture = NSImage(data: data) else { return nil }
+        self.init(nsImage: picture)
+        #else
+        guard let picture = UIImage(data: data) else { return nil }
+        self.init(uiImage: picture)
+        #endif
     }
 }
