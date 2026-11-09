@@ -375,10 +375,10 @@ fn next_card(inner: &mut Inner) -> anki::error::Result<StudyCardJson> {
     let tr = I18n::template_only();
     // Type-the-answer cards: the box is drawn by the app, so the question loses
     // Anki's marker, and the answer shows the right answer where it was.
-    let raw_question = rendered.question().into_owned();
+    let raw_question = side_html(&rendered.qnodes);
     let type_answer = type_marker(&raw_question).is_some();
     let question_html = strip_type_marker(&raw_question);
-    let answer_html = fill_type_answer(&mut inner.col, next.card.id(), &rendered.answer(), "");
+    let answer_html = fill_type_answer(&mut inner.col, next.card.id(), &side_html(&rendered.anodes), "");
     let (question, question_audio) = prepare_side(&question_html, true, &tr);
     let (answer, answer_audio) = prepare_side(&answer_html, false, &tr);
     let auto_advance = auto_advance_for(&mut inner.col, &next.card);
@@ -389,7 +389,7 @@ fn next_card(inner: &mut Inner) -> anki::error::Result<StudyCardJson> {
             .col
             .render_existing_card(after.card.id(), false, false)
             .ok()
-            .map(|r| r.question().into_owned())
+            .map(|r| side_html(&r.qnodes))
     });
 
     let occlusion = occlusion_fields(&mut inner.col, next.card.id());
@@ -1019,13 +1019,30 @@ const BROWSE_COLUMNS: [&str; 8] = [
     "noteFld", "deck", "cardDue", "cardIvl", "cardEase", "note", "template", "noteCrt",
 ];
 
+/// One side of a card as a single piece of HTML.
+///
+/// Anki hands a side back in pieces. Usually there's one, but an empty card's
+/// front comes in two: the card as far as it renders, then Anki's note saying
+/// what's missing ("No cloze 3 found on card"). Anki's own `question()` gives
+/// up on anything but one piece and says "not fully rendered", so join them.
+fn side_html(nodes: &[anki::template::RenderedNode]) -> String {
+    use anki::template::RenderedNode;
+    nodes
+        .iter()
+        .map(|node| match node {
+            RenderedNode::Text { text } => text.as_str(),
+            RenderedNode::Replacement { current_text, .. } => current_text.as_str(),
+        })
+        .collect()
+}
+
 /// The answer side as one line of plain text, without the question repeated:
 /// most card types show the question, then a divider, then the answer.
 fn back_text(col: &mut Collection, card_id: CardId) -> String {
     let Ok(rendered) = col.render_existing_card(card_id, true, false) else {
         return String::new();
     };
-    let answer = rendered.answer();
+    let answer = side_html(&rendered.anodes);
     let after_divider = answer
         .find("id=answer")
         .or_else(|| answer.find("id=\"answer\""))
@@ -1221,8 +1238,8 @@ pub unsafe extern "C" fn study_note_for_card(engine: *mut Engine, json: *const c
             let tr = I18n::template_only();
             let (question, answer, css) = match col.render_existing_card(card.id(), false, false) {
                 Ok(r) => (
-                    prepare_side(&r.question(), true, &tr).0,
-                    prepare_side(&r.answer(), false, &tr).0,
+                    prepare_side(&side_html(&r.qnodes), true, &tr).0,
+                    prepare_side(&side_html(&r.anodes), false, &tr).0,
                     r.css,
                 ),
                 Err(err) => (err.message(&tr), String::new(), String::new()),
@@ -3347,7 +3364,7 @@ pub unsafe extern "C" fn study_typed_answer(engine: *mut Engine, json: *const c_
         with_request(engine, json, |inner, req: TypedAnswerRequest| {
             let id = anki::card::CardId(req.card_id);
             let rendered = inner.col.render_existing_card(id, false, false).map_err(|e| e.to_string())?;
-            let html = fill_type_answer(&mut inner.col, id, &rendered.answer(), &req.typed);
+            let html = fill_type_answer(&mut inner.col, id, &side_html(&rendered.anodes), &req.typed);
             let (answer, answer_audio) = prepare_side(&html, false, &I18n::template_only());
             Ok(TypedAnswerJson { answer, answer_audio })
         })

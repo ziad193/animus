@@ -61,6 +61,11 @@ do {
         if let next = try await engine.nextCard().card { print("next card typeAnswer:", next.typeAnswer, "autoAdvance:", String(describing: next.autoAdvance)) }
         let empty = try await engine.emptyCards()
         print("empty cards:", empty.cardIDs.count, "report chars:", empty.report.count)
+        for id in empty.cardIDs.prefix(3) {
+            // An empty card's front is the card plus Anki's "No cloze N found" note, never "not fully rendered".
+            let note = try await engine.note(forCard: id)
+            print("  empty card front:", plain(note.question).suffix(70), "| back:", plain(note.answer).prefix(40))
+        }
         print("rename gaptest -> gapdone:", try await engine.renameTag("gaptest", to: "gapdone"))
         print("tags now:", try await engine.allTags().filter { $0.hasPrefix("gap") })
         print("delete gapdone:", try await engine.deleteTag("gapdone"))

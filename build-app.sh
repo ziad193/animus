@@ -5,15 +5,30 @@
 set -e
 cd "$(dirname "$0")"
 
+# Rebuild the engine first if its Rust code has changed since it was last built.
+LIB=engine/target/lib/libstudy_engine.a
+if [[ -f $LIB && -n "$(find engine/src engine/Cargo.toml -newer $LIB -type f -print -quit)" ]]; then
+  if lipo -archs $LIB | grep -q x86_64 || [[ "$1" == "--universal" ]]; then ./build-engine.sh --universal; else ./build-engine.sh; fi
+fi
+
 if [[ "$1" == "--universal" ]]; then
   # The engine has to contain both kinds of Mac too.
   if ! lipo -archs engine/target/lib/libstudy_engine.a 2>/dev/null | grep -q x86_64; then
     ./build-engine.sh --universal
   fi
-  swift build -c release --triple arm64-apple-macosx15.0
-  swift build -c release --triple x86_64-apple-macosx15.0
+  # Newer Swift puts both kinds of Mac in the same folder, one overwriting the
+  # other, so ask where each build went and keep a copy before the next one.
   mkdir -p .build/universal
-  lipo -create .build/arm64-apple-macosx/release/StudyApp .build/x86_64-apple-macosx/release/StudyApp \
+  for ARCH in arm64 x86_64; do
+    swift build -c release --triple $ARCH-apple-macosx15.0
+    BUILT="$(swift build -c release --triple $ARCH-apple-macosx15.0 --show-bin-path)/StudyApp"
+    if [[ "$(lipo -archs "$BUILT")" != "$ARCH" ]]; then
+      echo "Stopped: expected an $ARCH build at $BUILT, found $(lipo -archs "$BUILT")." >&2
+      exit 1
+    fi
+    cp "$BUILT" .build/universal/StudyApp-$ARCH
+  done
+  lipo -create .build/universal/StudyApp-arm64 .build/universal/StudyApp-x86_64 \
        -output .build/universal/StudyApp
   BINARY=.build/universal/StudyApp
 else
@@ -22,6 +37,13 @@ else
   [ -L .build/release ] && rm .build/release
   swift build -c release
   BINARY=.build/release/StudyApp
+fi
+
+# Never package an out-of-date build: the app must be newer than every source file.
+STALE="$(find Sources Package.swift -newer "$BINARY" -type f -print -quit)"
+if [[ -n "$STALE" ]]; then
+  echo "Stopped: $BINARY is older than $STALE, so it doesn't contain your latest changes." >&2
+  exit 1
 fi
 
 APP="build/Animus.app"
