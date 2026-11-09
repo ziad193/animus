@@ -111,7 +111,7 @@ struct AnimusSettings: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                .toggleStyle(.switch)
+                .toggleStyle(.row)
             }
 
             // A product key.
@@ -151,7 +151,7 @@ struct AnimusSettings: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                .toggleStyle(.switch)
+                .toggleStyle(.row)
             }
 
             // Animus Dev only: switch Animus+ on, to build and try its screens.
@@ -163,7 +163,7 @@ struct AnimusSettings: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                .toggleStyle(.switch)
+                .toggleStyle(.row)
             }
 
             Divider()

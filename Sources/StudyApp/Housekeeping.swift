@@ -346,8 +346,16 @@ struct CollectionToolsView: View {
                         Text(HTMLText.plain(empty.report))
                             .font(.caption).foregroundStyle(.secondary)
                             .lineLimit(8)
-                        Button(role: .destructive) { confirmEmpty = true } label: {
-                            Label("Delete \(empty.cardIDs.count == 1 ? "It" : "Them")…", systemImage: "trash")
+                        HStack {
+                            Button {
+                                library.browseSearch = "cid:" + empty.cardIDs.map(String.init).joined(separator: ",")
+                            } label: {
+                                Label("Show in Browse", systemImage: "magnifyingglass")
+                            }
+                            .tip("See these cards in Browse before deciding")
+                            Button(role: .destructive) { confirmEmpty = true } label: {
+                                Label("Delete \(empty.cardIDs.count == 1 ? "It" : "Them")…", systemImage: "trash")
+                            }
                         }
                         .confirmationDialog("Delete \(empty.cardIDs.count == 1 ? "1 empty card" : "\(empty.cardIDs.count) empty cards")?",
                                             isPresented: $confirmEmpty) {

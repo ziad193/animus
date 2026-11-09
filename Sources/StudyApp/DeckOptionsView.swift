@@ -125,6 +125,7 @@ struct DeckOptionsView: View {
                         Text("In the order added").tag(false)
                         Text("Random").tag(true)
                     }
+                    .pickerStyle(.segmented)
                     .labelsHidden()
                     .fixedSize()
                 }
@@ -138,6 +139,7 @@ struct DeckOptionsView: View {
                         Text("Suspend it").tag(true)
                         Text("Just tag it").tag(false)
                     }
+                    .pickerStyle(.segmented)
                     .labelsHidden()
                     .fixedSize()
                 }
@@ -176,12 +178,13 @@ struct DeckOptionsView: View {
                 if s.wrappedValue.autoAnswerSeconds > 0 {
                     row("When it moves on", "What happens to the card you didn't rate.") {
                         Picker("Answer action", selection: s.autoAnswerAction) {
-                            Text("Rate it Good").tag(2)
-                            Text("Rate it Hard").tag(3)
-                            Text("Rate it Again").tag(1)
-                            Text("Bury it").tag(0)
-                            Text("Just remind me").tag(4)
+                            Text("Good").tag(2)
+                            Text("Hard").tag(3)
+                            Text("Again").tag(1)
+                            Text("Bury").tag(0)
+                            Text("Remind").tag(4)
                         }
+                        .pickerStyle(.segmented)
                         .labelsHidden()
                         .fixedSize()
                     }
@@ -231,14 +234,7 @@ struct DeckOptionsView: View {
 
     private func seconds(_ title: String, _ help: String, _ value: Binding<Double>) -> some View {
         row(title, help) {
-            HStack(spacing: 4) {
-                TextField("", value: value, format: .number.precision(.fractionLength(0...1)))
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 60)
-                Stepper("", value: value, in: 0...600, step: 1).labelsHidden()
-                Text("sec").foregroundStyle(.secondary)
-            }
+            NumberPill(value: value, range: 0...600, unit: "sec")
         }
     }
 
@@ -278,16 +274,7 @@ struct DeckOptionsView: View {
 
     private func number(_ title: String, _ help: String, _ value: Binding<Int>, _ range: ClosedRange<Int>) -> some View {
         row(title, help) {
-            HStack(spacing: 4) {
-                TextField("", value: value, format: .number)
-                    .textFieldStyle(.roundedBorder)
-                    #if os(iOS)
-                    .keyboardType(.numberPad)
-                    #endif
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 70)
-                Stepper("", value: value, in: range).labelsHidden()
-            }
+            NumberPill(value: value, range: range, step: range.upperBound > 500 ? 5 : 1)
         }
     }
 

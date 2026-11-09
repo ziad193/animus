@@ -20,6 +20,8 @@ final class Library {
     var pendingProfile: URL?
     /// A short message to show the student (e.g. after an import).
     var notice: String?
+    /// A search for the main window to show in Browse (e.g. from Settings).
+    var browseSearch: String?
     /// A text/CSV file waiting in the import sheet.
     var csvImport: CSVFile?
 

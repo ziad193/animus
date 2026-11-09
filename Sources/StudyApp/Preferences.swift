@@ -170,6 +170,7 @@ private struct GeneralPreferences: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .toggleStyle(.row)
             Toggle(isOn: $studyGlow) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Glow when you answer")
@@ -177,7 +178,7 @@ private struct GeneralPreferences: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            .toggleStyle(.switch)
+            .toggleStyle(.row)
             Toggle(isOn: $slidesHint) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Slides & Notes hint in Add Cards")
@@ -185,7 +186,7 @@ private struct GeneralPreferences: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            .toggleStyle(.switch)
+            .toggleStyle(.row)
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Setup and tour")
@@ -252,13 +253,7 @@ private struct StudyingPreferences: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Your day").font(.headline)
             row("Next day starts at", "When yesterday's cards stop counting and today's become due. Pick a time you're usually asleep.") {
-                Picker("Next day starts at", selection: p.nextDayStartsAt) {
-                    ForEach(0..<24, id: \.self) { hour in
-                        Text(Self.hourText(hour)).tag(hour)
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
+                NumberPill(value: p.nextDayStartsAt, range: 0...23, wraps: true, text: Self.hourText)
             }
             row("Learn ahead limit", "If nothing else is left, show learning cards that are due within this many minutes instead of making you wait.") {
                 stepper(p.learnAheadMinutes, 0...240, suffix: "min")
@@ -271,10 +266,11 @@ private struct StudyingPreferences: View {
             Text("Card order").font(.headline)
             row("New cards", "Where new cards go among your reviews.") {
                 Picker("New card order", selection: p.newReviewMix) {
-                    Text("Mixed in with reviews").tag("mix")
+                    Text("Mixed in").tag("mix")
                     Text("After reviews").tag("reviews_first")
                     Text("Before reviews").tag("new_first")
                 }
+                .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
             }
@@ -308,14 +304,7 @@ private struct StudyingPreferences: View {
     }
 
     private func stepper(_ value: Binding<Int>, _ range: ClosedRange<Int>, suffix: String) -> some View {
-        HStack(spacing: 4) {
-            TextField("", value: value, format: .number)
-                .textFieldStyle(.roundedBorder)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 56)
-            Text(suffix).foregroundStyle(.secondary)
-            Stepper("", value: value, in: range).labelsHidden()
-        }
+        NumberPill(value: value, range: range, unit: suffix)
     }
 
     static func hourText(_ hour: Int) -> String {

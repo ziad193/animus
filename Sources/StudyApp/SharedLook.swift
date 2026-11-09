@@ -568,3 +568,116 @@ enum IntervalText {
         return String(format: "%.1f years", d / 365)
     }
 }
+
+// MARK: - Settings controls
+
+/// A number chooser: − and + either side of the value, in a soft pill.
+/// Hold a button to keep counting; click the number to type one.
+struct NumberPill: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    var step: Int = 1
+    /// Past the end it goes round to the start (e.g. hours of the day).
+    var wraps = false
+    var unit: String? = nil
+    /// How the number is shown, e.g. "5 am" for an hour.
+    var text: ((Int) -> String)? = nil
+
+    @State private var typing = false
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 2) {
+            button("minus", by: -step)
+            Group {
+                if typing {
+                    TextField("", text: $draft)
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.center)
+                        .focused($focused)
+                        .onSubmit(commit)
+                        .onChange(of: focused) { if !focused { commit() } }
+                } else {
+                    Button {
+                        draft = String(value)
+                        typing = true
+                        focused = true
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text(text?(value) ?? String(value))
+                                .monospacedDigit()
+                                .contentTransition(.numericText(value: Double(value)))
+                            if let unit { Text(unit).foregroundStyle(.secondary) }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(minWidth: 70)
+            button("plus", by: step)
+        }
+        .padding(3)
+        .background(Capsule().fill(Color.primary.opacity(0.06)))
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
+        .fixedSize()
+        .animation(.snappy(duration: 0.15), value: value)
+    }
+
+    private func button(_ symbol: String, by change: Int) -> some View {
+        let next = value + change
+        let allowed = wraps || range.contains(next)
+        return Button {
+            if range.contains(next) {
+                value = next
+            } else if wraps {
+                value = change > 0 ? range.lowerBound : range.upperBound
+            }
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(Color.primary.opacity(allowed ? 0.08 : 0.03)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .buttonRepeatBehavior(.enabled)
+        .foregroundStyle(allowed ? Color.primary : Color.secondary.opacity(0.5))
+        .disabled(!allowed)
+    }
+
+    private func commit() {
+        if let typed = Int(draft.trimmingCharacters(in: .whitespaces)) {
+            value = min(max(typed, range.lowerBound), range.upperBound)
+        }
+        typing = false
+    }
+}
+
+extension NumberPill {
+    /// For settings stored as decimals (e.g. seconds).
+    init(value: Binding<Double>, range: ClosedRange<Int>, step: Int = 1, unit: String? = nil) {
+        self.init(value: Binding(get: { Int(value.wrappedValue.rounded()) }, set: { value.wrappedValue = Double($0) }),
+                  range: range, step: step, unit: unit)
+    }
+}
+
+/// A switch on the right-hand edge with its label filling the space to the
+/// left, so every switch in a list lines up, however long its text.
+struct RowSwitchStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            configuration.label
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("", isOn: configuration.$isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+        }
+    }
+}
+
+extension ToggleStyle where Self == RowSwitchStyle {
+    static var row: RowSwitchStyle { RowSwitchStyle() }
+}

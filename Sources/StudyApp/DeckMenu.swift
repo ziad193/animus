@@ -28,6 +28,10 @@ final class DeckActions {
     }
     /// After a delete, offered as an Undo button.
     var lastDeleted: String?
+    /// Asking before every card in this deck starts again from new.
+    var resetting: Deck?
+    /// Shows the deck's cards in Browse (set by the main window).
+    var browse: ((Deck) -> Void)?
 }
 
 /// The cog on every deck: Rename, Options, Export, Delete.
@@ -46,6 +50,7 @@ struct DeckMenu: View {
                 Divider()
                 Button(role: .destructive) { actions.deleting = deck } label: { Label("Delete (Cards Go Back)", systemImage: "trash") }
             } else {
+                Button { actions.browse?(deck) } label: { Label("Browse Cards", systemImage: "magnifyingglass") }
                 Button { actions.renaming = deck } label: { Label("Rename…", systemImage: "pencil") }
                 Button { actions.studyMore = deck } label: { Label("Study More Today…", systemImage: "plus.circle") }
                 Button { actions.options = deck } label: { Label("Options…", systemImage: "slider.horizontal.3") }
@@ -54,6 +59,7 @@ struct DeckMenu: View {
                 }
                 Button { actions.exporting = deck } label: { Label("Export…", systemImage: "square.and.arrow.up") }
                 Divider()
+                Button(role: .destructive) { actions.resetting = deck } label: { Label("Reset Progress…", systemImage: "arrow.counterclockwise") }
                 Button(role: .destructive) { actions.deleting = deck } label: { Label("Delete…", systemImage: "trash") }
             }
         } label: {
@@ -129,6 +135,13 @@ struct DeckActionPresenter: ViewModifier {
                      ? "This deletes its \(deck.totalCards) cards. You can undo it straight after."
                      : "This deletes its \(deck.children.count) sections and all \(deck.totalCards) cards inside. You can undo it straight after.")
             }
+            .confirmationDialog(resetTitle, isPresented: Binding(get: { actions.resetting != nil },
+                                                                 set: { if !$0 { actions.resetting = nil } }),
+                                presenting: actions.resetting) { deck in
+                Button("Reset All \(deck.totalCards) Cards", role: .destructive) { Task { await reset(deck) } }
+            } message: { deck in
+                Text("Every card in this deck\(deck.children.isEmpty ? "" : " and its \(deck.children.count) sections") goes back to new, as if you'd never studied it. You'll learn them all again from the start. Your review history is kept, and you can undo this straight after with ⌘Z.")
+            }
             .alert("Deck deleted", isPresented: Binding(get: { actions.lastDeleted != nil },
                                                         set: { if !$0 { actions.lastDeleted = nil } })) {
                 Button("Undo") { Task { await undoDelete() } }
@@ -136,6 +149,24 @@ struct DeckActionPresenter: ViewModifier {
             } message: {
                 Text("“\(actions.lastDeleted ?? "")” and its cards were deleted.")
             }
+    }
+
+    private var resetTitle: String {
+        "Reset your progress in “\(actions.resetting?.shortName ?? "")”?"
+    }
+
+    private func reset(_ deck: Deck) async {
+        guard let engine = library.engine else { return }
+        do {
+            _ = await library.backup(force: false)
+            let ids = deck.idsIncludingSections.map(String.init).joined(separator: ",")
+            let cards = try await engine.search("did:\(ids)")
+            try await engine.forget(cards)
+            library.notice = "Reset \(cards.count) cards in “\(deck.shortName)” to new. Press ⌘Z to undo."
+            await library.refresh()
+        } catch {
+            library.notice = error.localizedDescription
+        }
     }
 
     private var deleteTitle: String {

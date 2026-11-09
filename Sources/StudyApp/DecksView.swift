@@ -98,6 +98,17 @@ struct DecksView: View {
                 deckActions.options = first
             }
         }
+        .onAppear { deckActions.browse = { deck in browseDeck(deck) } }
+        // Settings asked to show some cards (e.g. the empty ones it found).
+        .onChange(of: library.browseSearch) { _, search in
+            guard let search else { return }
+            browse.filter = .all
+            browse.deckID = nil
+            browse.query = search
+            select(.browse)
+            library.browseSearch = nil
+            NSApp.windows.first { $0.identifier?.rawValue.contains("AppWindow") == true }?.makeKeyAndOrderFront(nil)
+        }
         .onChange(of: deckActions.openDeck) { _, id in
             if let id { select(.deck(id)); deckActions.openDeck = nil }
         }
@@ -118,22 +129,26 @@ struct DecksView: View {
                 Divider()
             }
             NavigationStack(path: $path) {
+                // The pages you came through stay alive underneath the one on
+                // top. Only the top one is drawn, so none can ever show through.
                 root
+                    .onlyWhenOnTop(path.isEmpty)
                     .navigationDestination(for: Route.self) { route in
-                        switch route {
-                        case .deck(let id):
-                            if let deck = Deck.find(id, in: decks) {
-                                // Its own solid background: the page it opened from stays
-                                // underneath, and would show through a see-through one.
-                                DeckPage(deck: deck, open: open, study: study, browse: browseDeck)
-                                    .screenBackground(plain: Color(nsColor: .windowBackgroundColor))
-                            }
-                        case .study(let id):
-                            if let deck = Deck.find(id, in: decks) {
-                                StudyView(deck: deck) { path.removeLast() }
-                                    .navigationBarBackButtonHidden()
+                        Group {
+                            switch route {
+                            case .deck(let id):
+                                if let deck = Deck.find(id, in: decks) {
+                                    DeckPage(deck: deck, open: open, study: study, browse: browseDeck)
+                                        .screenBackground(plain: Color(nsColor: .windowBackgroundColor))
+                                }
+                            case .study(let id):
+                                if let deck = Deck.find(id, in: decks) {
+                                    StudyView(deck: deck) { path.removeLast() }
+                                        .navigationBarBackButtonHidden()
+                                }
                             }
                         }
+                        .onlyWhenOnTop(path.last == route)
                     }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1244,5 +1259,15 @@ private struct TabButton: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(.default, action)
         .tip(title)
+    }
+}
+
+
+private extension View {
+    /// Hides a page (and keeps clicks and VoiceOver off it) while another is on top.
+    func onlyWhenOnTop(_ onTop: Bool) -> some View {
+        opacity(onTop ? 1 : 0)
+            .allowsHitTesting(onTop)
+            .accessibilityHidden(!onTop)
     }
 }

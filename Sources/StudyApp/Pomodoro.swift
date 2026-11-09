@@ -379,13 +379,13 @@ struct PomodoroSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Stepper("Focus: \(focus) min", value: $focus, in: 1...180)
-            Stepper("Short break: \(shortBreak) min", value: $shortBreak, in: 1...60)
-            Stepper("Long break: \(longBreak) min", value: $longBreak, in: 1...120)
-            Stepper("Long break every \(rounds) rounds", value: $rounds, in: 1...12)
-            Toggle("Start breaks automatically", isOn: $autoBreaks)
-            Toggle("Start focus automatically after a break", isOn: $autoFocus)
-            Toggle("Play a sound when time's up", isOn: $sound)
+            pillRow("Focus", NumberPill(value: $focus, range: 1...180, unit: "min"))
+            pillRow("Short break", NumberPill(value: $shortBreak, range: 1...60, unit: "min"))
+            pillRow("Long break", NumberPill(value: $longBreak, range: 1...120, unit: "min"))
+            pillRow("Long break every", NumberPill(value: $rounds, range: 1...12, unit: "rounds"))
+            Toggle("Start breaks automatically", isOn: $autoBreaks).toggleStyle(.row)
+            Toggle("Start focus automatically after a break", isOn: $autoFocus).toggleStyle(.row)
+            Toggle("Play a sound when time's up", isOn: $sound).toggleStyle(.row)
         }
         .onChange(of: focus) { timer.settingsChanged() }
         .onChange(of: shortBreak) { timer.settingsChanged() }
@@ -583,5 +583,15 @@ private struct TaskRow: View {
         .padding(.horizontal, 4)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(hovering ? 0.05 : 0)))
         .onHover { hovering = $0 }
+    }
+}
+
+
+/// A label on the left and a number chooser on the right edge.
+func pillRow(_ title: String, _ pill: NumberPill) -> some View {
+    HStack {
+        Text(title)
+        Spacer(minLength: 12)
+        pill
     }
 }
