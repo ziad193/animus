@@ -37,6 +37,10 @@ enum CardPage {
       .nightMode [style*="background-color: white"],
       .nightMode [style*="background-color: #fff"] { background-color: transparent !important; }
 
+      /* No pane behind the card: a soft dark edge keeps the words readable on a picture. */
+      .on-picture #qa { text-shadow: 0 1px 2px rgba(0,0,0,.75), 0 0 14px rgba(0,0,0,.55); }
+      .on-picture #qa img { filter: drop-shadow(0 2px 10px rgba(0,0,0,.45)); }
+
       /* The answer slides in under the question. */
       .study-reveal { animation: study-reveal 180ms ease-out both; }
       @keyframes study-reveal {
@@ -182,6 +186,7 @@ enum CardPage {
         body.classList.toggle("nightMode", p.dark);
         body.classList.toggle("night_mode", p.dark);
         body.classList.toggle("app-style", p.appStyle);
+        body.classList.toggle("on-picture", !!p.onPicture);
         document.documentElement.style.setProperty("--zoom", p.zoom);
         document.documentElement.style.setProperty("--accent", p.accent);
         document.getElementById("note-css").textContent = p.css;

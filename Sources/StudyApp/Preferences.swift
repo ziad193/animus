@@ -8,6 +8,7 @@ struct AppearancePicker: View {
     @AppStorage(Pref.accent) private var accent = AccentChoice.blue
     @AppStorage(Pref.cardTextSize) private var textSize = CardTextSize.normal
     @AppStorage(Pref.cardStyle) private var cardStyle = CardStyle.app
+    @AppStorage(Pref.studyPane) private var paneStyle = CardPaneStyle.frosted
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -56,6 +57,19 @@ struct AppearancePicker: View {
                 Text(cardStyle == .app
                      ? "Cards use the app's font and colours, so every deck looks consistent."
                      : "Cards keep the fonts and colours the deck's creator chose.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            section("Pane behind the card") {
+                Picker("Pane behind the card", selection: $paneStyle) {
+                    ForEach(CardPaneStyle.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 360)
+                Text(paneStyle == .none
+                     ? "No pane: the card's words sit straight on your background."
+                     : "How much of your background picture shows through the glass the card sits on while you study.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -153,6 +167,9 @@ private struct GeneralPreferences: View {
     @AppStorage(Pref.setupDone) private var setupDone = false
     @AppStorage(Pref.slidesHint) private var slidesHint = true
     @AppStorage(Pref.studyGlow) private var studyGlow = true
+    @AppStorage(Pref.perfMeter) private var perfMeter = false
+    @AppStorage(Pref.connector) private var connectorOn = false
+    @State private var connectorNote: String?
     @AppStorage(UpdateChecker.automaticKey, store: AppDefaults.base) private var autoUpdates = true
 
     var body: some View {
@@ -179,6 +196,37 @@ private struct GeneralPreferences: View {
                 }
             }
             .toggleStyle(.row)
+            Toggle(isOn: $perfMeter) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Performance meter")
+                    Text("A small box in the bottom-left corner showing frames per second, the slowest frame, and how much processor, memory and graphics power is in use.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.row)
+            Toggle(isOn: $connectorOn) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Claude connector (test)")
+                    Text("Lets the Claude app on this Mac read your decks and cards and add new cards, while Animus is open. For trying out Animus's AI features; it will be removed later. A backup is made before Claude adds anything.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.row)
+            if connectorOn {
+                HStack(spacing: 8) {
+                    Button("Add to Claude") { connectorNote = Connector.addToClaude() }
+                        .tip("Adds Animus to the Claude desktop app's connectors for you")
+                    Button("Copy Setup") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(Connector.setupText, forType: .string)
+                        connectorNote = "Copied. Paste it into Claude's connector settings file."
+                    }
+                    .tip("Copies the settings to add by hand, e.g. for Claude Code")
+                    if let connectorNote {
+                        Text(connectorNote).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
             Toggle(isOn: $slidesHint) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Slides & Notes hint in Add Cards")

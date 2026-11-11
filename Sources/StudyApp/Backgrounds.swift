@@ -6,6 +6,7 @@ typealias PlatformImage = NSImage
 import UIKit
 typealias PlatformImage = UIImage
 #endif
+import CoreImage
 import CryptoKit
 import Observation
 import SwiftUI
@@ -436,8 +437,8 @@ struct BlockFill: View {
     @Environment(\.onPicture) private var onPicture
 
     var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(onPicture ? AnyShapeStyle(.regularMaterial) : plain)
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if onPicture { GlassFill(shape: shape) } else { shape.fill(plain) }
     }
 }
 
@@ -484,14 +485,24 @@ private struct FrostedOnPicture: ViewModifier {
     var alsoOnBanner = false
     @Environment(\.onPicture) private var onPicture
     @Environment(\.onBanner) private var onBanner
+    @Environment(\.pictureGlass) private var glass
 
     func body(content: Content) -> some View {
-        if onPicture || (alsoOnBanner && onBanner) {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if (onPicture || (alsoOnBanner && onBanner)), glass != nil {
             content
                 .padding(padding)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(0.14)))
+                .background(GlassFill(shape: shape))
+                .overlay(shape.strokeBorder(.white.opacity(0.14)))
+                // The shadow comes from a plain shape hidden behind the glass,
+                // which can be drawn once; a shadow cast by the block itself
+                // has to be worked out again whenever anything in it moves.
+                .background(shape.inset(by: 1).fill(.black).shadow(color: .black.opacity(0.12), radius: 12, y: 4))
+        } else if onPicture || (alsoOnBanner && onBanner) {
+            content
+                .padding(padding)
+                .background(.regularMaterial, in: shape)
+                .overlay(shape.strokeBorder(.white.opacity(0.14)))
                 .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
         } else {
             content
@@ -513,7 +524,7 @@ private struct ScreenBackground: ViewModifier {
         } else {
             content
                 .environment(\.onPicture, true)
-                .background { BackgroundFill(background: background).ignoresSafeArea() }
+                .modifier(PictureBackdrop(background: background, banner: false, showing: true))
         }
     }
 }
@@ -700,5 +711,156 @@ extension Image {
         #else
         self.init(uiImage: platformImage)
         #endif
+    }
+}
+
+// MARK: - Cheap frosted glass
+
+// Frosted glass that is cheap to scroll.
+//
+// Real glass (`Material`) blurs whatever is behind it, afresh, for every frame
+// it moves. Home is nearly all glass panels sliding over one fixed picture, so
+// scrolling it meant re-blurring most of the window sixty times a second.
+// The picture never changes, so here it's blurred once, and each panel simply
+// shows its own patch of that soft copy. Same look, a fraction of the work.
+
+/// What a block needs to draw that glass: the soft copy of the picture, and
+/// where the picture sits on screen (it stays put while the page scrolls).
+struct PictureGlass: Equatable {
+    let image: CGImage
+    let frame: CGRect
+    /// Home's banner picture is darkened, most at the top; other pages only dim it at night.
+    let banner: Bool
+
+    static func == (a: PictureGlass, b: PictureGlass) -> Bool {
+        a.image === b.image && a.frame == b.frame && a.banner == b.banner
+    }
+}
+
+private struct PictureGlassKey: EnvironmentKey { static let defaultValue: PictureGlass? = nil }
+extension EnvironmentValues {
+    /// Set on pages with a background picture; nil means use real glass.
+    var pictureGlass: PictureGlass? {
+        get { self[PictureGlassKey.self] }
+        set { self[PictureGlassKey.self] = newValue }
+    }
+}
+
+/// Dev builds can switch back to real glass, to compare the two side by side.
+@MainActor
+@Observable
+final class GlassTest {
+    static let shared = GlassTest()
+    var live = false
+}
+
+/// A frosted fill for a block over a background picture.
+struct GlassFill<S: Shape>: View {
+    let shape: S
+    @Environment(\.pictureGlass) private var glass
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        if let glass {
+            let frame = glass.frame
+            Color.clear
+                .overlay(alignment: .topLeading) {
+                    // The whole soft picture, laid out exactly as the sharp one
+                    // behind the page, then slid so this block shows the patch
+                    // it's sitting on. Sliding it is all that happens per frame.
+                    Image(decorative: glass.image, scale: 1)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: frame.width, height: frame.height)
+                        .clipped()
+                        .overlay(Color.black.opacity(glass.banner || scheme == .dark ? 0.28 : 0))
+                        .overlay {
+                            if glass.banner {
+                                LinearGradient(colors: [.black.opacity(0.5), .black.opacity(0.2)],
+                                               startPoint: .top, endPoint: .bottom)
+                            }
+                        }
+                        .visualEffect { content, proxy in
+                            let here = proxy.frame(in: .global)
+                            return content.offset(x: frame.minX - here.minX, y: frame.minY - here.minY)
+                        }
+                }
+                // The glass's own tint, as the system's does: smoky in dark mode, milky in light.
+                .overlay(scheme == .dark ? Color(white: 0.15).opacity(0.55) : Color.white.opacity(0.62))
+                .clipShape(shape)
+                .allowsHitTesting(false)
+        } else {
+            shape.fill(.regularMaterial)
+        }
+    }
+}
+
+/// Puts the picture behind a page, and hands the page's blocks what they need
+/// to draw cheap glass over it.
+struct PictureBackdrop: ViewModifier {
+    let background: AppBackground
+    /// Home's banner look (darkened) rather than the plain picture.
+    let banner: Bool
+    let showing: Bool
+    @State private var frame = CGRect.zero
+    @State private var soft: CGImage?
+    @State private var store = BackgroundStore.shared
+    @State private var test = GlassTest.shared
+
+    private var glass: PictureGlass? {
+        guard showing, !test.live, let soft, frame.width > 1, frame.height > 1 else { return nil }
+        return PictureGlass(image: soft, frame: frame, banner: banner)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            // Only when this page shows a picture itself: otherwise leave
+            // whatever an outer page background has already set up.
+            .transformEnvironment(\.pictureGlass) { if showing { $0 = glass } }
+            .background {
+                if showing {
+                    Group {
+                        if banner { BannerBackdrop(background: background) } else { BackgroundFill(background: background) }
+                    }
+                    .ignoresSafeArea()
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
+                }
+            }
+            .task(id: "\(background.rawValue) \(store.generation) \(showing)") {
+                soft = showing ? await background.softCopy() : nil
+            }
+    }
+}
+
+extension AppBackground {
+    @MainActor private static var softCache: (name: String, image: CGImage)?
+
+    /// A small, heavily blurred copy of the picture: what frosted glass shows.
+    /// Made once per picture, off the main thread.
+    @MainActor func softCopy() async -> CGImage? {
+        if let hit = Self.softCache, hit.name == rawValue { return hit.image }
+        guard isPicture, let full = image() else { return nil }
+        #if os(macOS)
+        let source = full.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        #else
+        let source = full.cgImage
+        #endif
+        guard let source else { return nil }
+        let name = rawValue
+        let made = await Task.detached(priority: .userInitiated) { Self.blurred(source) }.value
+        if let made { Self.softCache = (name, made) }
+        return made
+    }
+
+    nonisolated private static func blurred(_ source: CGImage) -> CGImage? {
+        let full = CIImage(cgImage: source)
+        // Blurred detail doesn't need many pixels: 640 across is plenty.
+        let scale = 640 / full.extent.width
+        let small = full.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let soft = small.clampedToExtent()
+            .applyingGaussianBlur(sigma: 12)
+            .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 1.5])
+            .cropped(to: small.extent)
+        return CIContext().createCGImage(soft, from: small.extent)
     }
 }

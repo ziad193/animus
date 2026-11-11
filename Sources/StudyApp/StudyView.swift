@@ -208,6 +208,8 @@ struct StudyView: View {
     @State private var missed: AskContext?
     @State private var askingAboutMissed: AskContext?
     @AppStorage(Pref.studyGlow) private var studyGlow = true
+    @AppStorage(Pref.studyPane) private var paneStyle = CardPaneStyle.frosted
+    @AppStorage(AppBackground.key) private var background = AppBackground.none
     private var glowColor: Color? {
         guard studyGlow else { return nil }
         if let flash { return Palette.grade(flash) }
@@ -219,19 +221,36 @@ struct StudyView: View {
     @AppStorage(Pref.studyShowTabs) private var studyShowTabs = true
 
     private var header: some View {
-        // The counts sit dead centre, whatever is on either side of them.
-        ZStack {
-            HStack {
-                leftButtons
-                Spacer()
+        // As the space shrinks (e.g. with Slides & Notes open beside the card):
+        // first the buttons lose their words, then the counts do, so nothing
+        // ever sits on top of anything else.
+        ViewThatFits(in: .horizontal) {
+            headerRow(icons: false, shortCounts: false)
+            headerRow(icons: true, shortCounts: false)
+            headerRow(icons: true, shortCounts: true)
+        }
+    }
+
+    private func headerRow(icons: Bool, shortCounts: Bool) -> some View {
+        // The counts sit in the centre: the two sides share what's left equally.
+        HStack(spacing: 8) {
+            Group {
+                if icons { leftButtons.labelStyle(.iconOnly) } else { leftButtons }
+            }
+            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if library.preferences?.showRemainingDueCounts ?? true {
+                CountsBar(counts: session.counts, current: session.card?.state, compact: shortCounts)
+                    .fixedSize()
+            }
+            Group {
                 // The card's tools, tucked into one menu in the corner.
                 if let card = session.card {
                     CardMenuButton(session: session, card: card)
                 }
             }
-            if library.preferences?.showRemainingDueCounts ?? true {
-                CountsBar(counts: session.counts, current: session.card?.state)
-            }
+            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
@@ -285,7 +304,8 @@ struct StudyView: View {
                                     dark: colorScheme == .dark,
                                     zoom: textSize.zoom,
                                     appStyle: cardStyle == .app,
-                                    accentHex: accent.hex),
+                                    accentHex: accent.hex,
+                                    onPicture: paneStyle.needsTextShadow && background.isShowing),
                                 mediaFolder: Library.mediaFolder) { side, index in
                         session.playAudio(side: side, index: index)
                     }
@@ -296,7 +316,7 @@ struct StudyView: View {
                 CardBadges(flag: card.flag, marked: card.marked)
                     .padding(12)
             }
-            .background(CardPane(glow: glowColor, strength: flash != nil ? 1 : 0.5))
+            .background(CardPane(glow: glowColor, strength: flash != nil ? 1 : 0.5, style: paneStyle))
             .padding(.vertical, 4)
         } else if session.finished {
             ContentUnavailableView {
@@ -750,6 +770,7 @@ final class StudySession {
     // MARK: Keyboard
 
     func installKeys() {
+        ConnectorHooks.studySession = self   // test only: so Claude can see the card on screen
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }

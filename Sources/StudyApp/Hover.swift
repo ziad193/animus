@@ -138,6 +138,38 @@ private struct TipView: NSViewRepresentable {
     final class TipNSView: NSView {
         override var acceptsFirstResponder: Bool { false }
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        // macOS remembers where a tip is measured from the bottom of the window.
+        // When the window changes size, a tip near the top can be left behind
+        // at its old spot, and then shows over whatever is there now. So after
+        // a resize, hand the tip over again from where the view really is.
+        private var registeredAt = CGRect.null
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didResizeNotification, object: nil)
+            guard let window else { return }
+            registeredAt = convert(bounds, to: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(windowResized),
+                                                   name: NSWindow.didResizeNotification, object: window)
+        }
+
+        @objc private func windowResized() {
+            // Once the resizing has settled, not for every step of a drag.
+            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(registerAgain), object: nil)
+            perform(#selector(registerAgain), with: nil, afterDelay: 0.3)
+        }
+
+        @objc private func registerAgain() {
+            guard window != nil, let text = toolTip else { return }
+            let now = convert(bounds, to: nil)
+            guard now != registeredAt else { return }
+            registeredAt = now
+            toolTip = nil
+            toolTip = text
+        }
+
+        deinit { NotificationCenter.default.removeObserver(self) }
     }
 }
 

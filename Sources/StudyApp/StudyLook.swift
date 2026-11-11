@@ -10,6 +10,8 @@ struct CountsBar: View {
     /// The card on screen: "new", "learning", "relearning" or "review". Its
     /// count is ringed, so you can see what kind of card it is.
     var current: String? = nil
+    /// Just the dots and numbers, for when there's no room for the words.
+    var compact = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -26,7 +28,7 @@ struct CountsBar: View {
             Circle().fill(color).frame(width: 7, height: 7)
             Text(value.map(String.init) ?? "–").bold()
                 .contentTransition(.numericText())
-            Text(label).foregroundStyle(on ? .primary : .secondary)
+            if !compact { Text(label).foregroundStyle(on ? .primary : .secondary) }
         }
         .padding(.horizontal, 9).padding(.vertical, 4)
         .background(Capsule().fill(color.opacity(on ? 0.16 : 0)))
@@ -43,12 +45,36 @@ struct CardPane: View {
     var glow: Color?
     /// 1 for the flash after answering, about half for the hover preview.
     var strength: Double = 1
+    /// How frosted the glass is over a picture; `.none` is no pane at all.
+    var style = CardPaneStyle.frosted
     @Environment(\.onPicture) private var onPicture
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        if style == .none {
+            // Nothing to see, except the answer's colour as a soft bloom
+            // behind the words (it has no pane to spill out from).
+            shape
+                .fill(glow ?? .clear)
+                .padding(40)
+                .blur(radius: 70)
+                .opacity(glow == nil ? 0 : 0.3 * strength)
+        } else {
+            pane(shape)
+        }
+    }
+
+    private var glass: AnyShapeStyle {
+        switch style {
+        case .lighter: AnyShapeStyle(.regularMaterial)
+        case .lightest: AnyShapeStyle(.ultraThinMaterial)
+        default: AnyShapeStyle(.thickMaterial)
+        }
+    }
+
+    private func pane(_ shape: RoundedRectangle) -> some View {
         shape
-            .fill(onPicture ? AnyShapeStyle(.thickMaterial) : AnyShapeStyle(.background))
+            .fill(onPicture ? glass : AnyShapeStyle(.background))
             .overlay(shape.strokeBorder(.white.opacity(onPicture ? 0.18 : 0)))
             .shadow(color: .black.opacity(onPicture ? 0.28 : 0.08), radius: onPicture ? 24 : 12, y: 6)
             // The glow sits behind the pane: a coloured halo spilling out

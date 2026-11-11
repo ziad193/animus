@@ -220,6 +220,13 @@ struct DevBuildBanner: View {
                 }
                 Text("·")
                 Text(Self.chip)
+                Text("·")
+                // For comparing how smoothly Home scrolls with each kind of glass.
+                Button(GlassTest.shared.live ? "Glass: old (click for new)" : "Glass: new (click for old)") {
+                    GlassTest.shared.live.toggle()
+                }
+                .buttonStyle(.plain)
+                .underline()
             }
             .font(.caption)
             .foregroundStyle(.white)

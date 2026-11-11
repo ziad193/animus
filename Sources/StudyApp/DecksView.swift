@@ -41,6 +41,7 @@ struct DecksView: View {
     @State private var addCardsDeck: Int64?
 
     private var place: Place { Place(tab: sidebar, path: path) }
+    private var tabsVisible: Bool { showTabs && !(studying && !studyShowTabs) }
     private var isHome: Bool { sidebar == .home && path.isEmpty }
     /// Hidden at launch (you start on Home); shown once you leave Home, and
     /// kept for 10 seconds after you come back.
@@ -56,7 +57,7 @@ struct DecksView: View {
         VStack(spacing: 0) {
             // Home has its own big buttons, so the tabs only show once you've left it.
             // Coming back Home, they stay for a few seconds, then slide away.
-            if showTabs && !(studying && !studyShowTabs) {
+            if tabsVisible {
                 VStack(spacing: 0) {
                     TabStrip(selection: sidebar, decks: decks, select: select)
                     Divider()
@@ -64,6 +65,11 @@ struct DecksView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
             pages
+                // The tabs slide in and out; the page under them moves in one
+                // step. Sliding the page too meant laying the whole page out
+                // afresh for every frame of the slide, which made it stutter.
+                // (Home is light enough to slide, when its tabs tuck away.)
+                .transaction(value: tabsVisible) { if !isHome { $0.animation = nil } }
         }
         .animation(.easeInOut(duration: 0.25), value: studyShowTabs)
         .onChange(of: isHome) { _, home in
@@ -114,6 +120,19 @@ struct DecksView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .iterumGoBack)) { _ in goBack() }
         .onReceive(NotificationCenter.default.publisher(for: .iterumGoForward)) { _ in goForward() }
+        // Dev builds only: a script opens pages by name to time them (see HitchLog).
+        .onReceive(NotificationCenter.default.publisher(for: .iterumPerfOpen)) { note in
+            guard Library.isTestCollection, let name = note.object as? String else { return }
+            switch name {
+            case "home": select(.home)
+            case "addcards": select(.addCards)
+            case "browse": select(.browse)
+            case "stats": select(.stats)
+            case "deck": if let deck = decks.first { select(.deck(deck.id)) }
+            case "study": if let deck = decks.first { sidebar = .deck(deck.id); path = [.study(deck.id)] }
+            default: break
+            }
+        }
     }
 
     /// The deck list only shows inside a deck (its page, or studying);
@@ -152,6 +171,9 @@ struct DecksView: View {
                     }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // The deck list slides in; the page beside it takes its new width
+            // in one step, not re-laid-out for every frame of the slide.
+            .transaction(value: wantsSidebar && roomForSidebar) { $0.animation = nil }
         }
         .animation(.easeInOut(duration: 0.22), value: wantsSidebar && roomForSidebar)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -475,11 +497,7 @@ private struct TodayPage: View {
             }
         }
         // The picture fills the whole of Home, behind everything.
-        .background {
-            if showsBanner {
-                BannerBackdrop(background: background).ignoresSafeArea()
-            }
-        }
+        .modifier(PictureBackdrop(background: background, banner: true, showing: showsBanner))
         .screenBackground()
         .task(id: decks.map(\.dueToday)) {
             stats = try? await library.engine?.stats(days: Heatmap.historyDays)
@@ -555,7 +573,9 @@ private struct TodayPage: View {
 
     /// Everything important, one click away.
     private var quickActions: some View {
-        FlowRow(spacing: 10) {
+        // One row when they fit, otherwise wrapped into equal columns.
+        // (`FlowRow` builds its buttons twice to find out which; this doesn't.)
+        ColumnsLayout(minimum: FlowRow<EmptyView>.itemWidth, spacing: 10, oneRowIfFits: true) {
             if let continueDeck {
                 ActionButton(title: "Continue", symbol: "play.fill", prominent: true,
                              help: "Carry on studying \(continueDeck.displayPath)") {
@@ -607,9 +627,16 @@ private struct ActionButton: View {
             }
             .padding(.horizontal, 14)
             .frame(minWidth: FlowRow<EmptyView>.itemWidth, maxWidth: .infinity, minHeight: 46, maxHeight: 46)
-            .background(RoundedRectangle(cornerRadius: 12)
-                .fill(prominent ? AnyShapeStyle(accent.color.gradient)
-                      : (onPicture || onBanner) ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(Color.primary.opacity(0.05))))
+            .background {
+                let shape = RoundedRectangle(cornerRadius: 12)
+                if prominent {
+                    shape.fill(accent.color.gradient)
+                } else if onPicture || onBanner {
+                    GlassFill(shape: shape)
+                } else {
+                    shape.fill(Color.primary.opacity(0.05))
+                }
+            }
             .overlay(RoundedRectangle(cornerRadius: 12)
                 .fill(Color.primary.opacity(hovering && !prominent ? 0.05 : 0)))
             .overlay(RoundedRectangle(cornerRadius: 12)
@@ -1181,6 +1208,7 @@ extension Notification.Name {
     static let iterumShowAddCards = Notification.Name("iterum.showAddCards")
     static let iterumGoBack = Notification.Name("iterum.goBack")
     static let iterumGoForward = Notification.Name("iterum.goForward")
+    static let iterumPerfOpen = Notification.Name("iterum.perfOpen")
 }
 
 /// Browser-style tabs along the top of the window.

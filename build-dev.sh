@@ -81,6 +81,9 @@ PREVIOUS=$(git tag --list 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
 [ -f Resources/AppIconDev.icns ] && cp Resources/AppIconDev.icns "$DEV/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$DEV" >/dev/null 2>&1 || true
 
+# The helper Claude starts to reach Animus Dev (test only): a copy outside the app, for this project's .mcp.json.
+cp build/Animus.app/Contents/MacOS/animus-connector build/animus-connector 2>/dev/null || true
+
 # Restart it on the new build (your real Animus is left alone).
 pkill -f "Animus Dev.app/Contents/MacOS/StudyApp" 2>/dev/null && sleep 2 || true
 if [[ $INTEL == 1 ]]; then ARCH=(--arch x86_64); else ARCH=(); fi

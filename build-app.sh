@@ -27,9 +27,12 @@ if [[ "$1" == "--universal" ]]; then
       exit 1
     fi
     cp "$BUILT" .build/universal/StudyApp-$ARCH
+    cp "${BUILT:h}/animus-connector" .build/universal/animus-connector-$ARCH
   done
   lipo -create .build/universal/StudyApp-arm64 .build/universal/StudyApp-x86_64 \
        -output .build/universal/StudyApp
+  lipo -create .build/universal/animus-connector-arm64 .build/universal/animus-connector-x86_64 \
+       -output .build/universal/animus-connector
   BINARY=.build/universal/StudyApp
 else
   [ -f engine/target/lib/libstudy_engine.a ] || ./build-engine.sh
@@ -40,9 +43,15 @@ else
 fi
 
 # Never package an out-of-date build: the app must be newer than every source file.
-STALE="$(find Sources Package.swift -newer "$BINARY" -type f -print -quit)"
+# (Each program is checked against its own sources: changing only the helper doesn't rebuild the app.)
+STALE="$(find Sources/StudyApp Sources/StudyCore Sources/CStudyEngine Package.swift -newer "$BINARY" -type f -print -quit)"
 if [[ -n "$STALE" ]]; then
   echo "Stopped: $BINARY is older than $STALE, so it doesn't contain your latest changes." >&2
+  exit 1
+fi
+STALE="$(find Sources/AnimusConnector Package.swift -newer "${BINARY:h}/animus-connector" -type f -print -quit)"
+if [[ -n "$STALE" ]]; then
+  echo "Stopped: the Claude helper is older than $STALE, so it doesn't contain your latest changes." >&2
   exit 1
 fi
 
@@ -50,6 +59,8 @@ APP="build/Animus.app"
 rm -rf "$APP" build/Study.app build/Iterum.app
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINARY" "$APP/Contents/MacOS/StudyApp"
+# The helper the Claude app starts to reach Animus (test only; see Connector.swift).
+cp "${BINARY:h}/animus-connector" "$APP/Contents/MacOS/animus-connector"
 cp Info.plist "$APP/Contents/Info.plist"
 cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # Maths formulas on cards (MathJax, Apache licence). Loaded only for cards that use it.
@@ -60,6 +71,7 @@ cp Resources/Credits.html "$APP/Contents/Resources/Credits.html"
 # Public-domain paintings (The Met, CC0) and a NASA photo. See Credits.html.
 mkdir -p "$APP/Contents/Resources/backgrounds"
 cp Resources/backgrounds/*-thumb.jpg "$APP/Contents/Resources/backgrounds/"
+codesign --force --sign - "$APP/Contents/MacOS/animus-connector" >/dev/null 2>&1 || true
 codesign --force --sign - "$APP" >/dev/null 2>&1 || true
 
 echo "Built $APP ($(du -sh "$APP" | cut -f1), $(lipo -archs "$APP/Contents/MacOS/StudyApp"))"

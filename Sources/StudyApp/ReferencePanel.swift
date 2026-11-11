@@ -65,25 +65,26 @@ struct ReferencePanel: View {
 
     private var tabBar: some View {
         HStack(spacing: 6) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(files, id: \.self) { file in
-                        FileTab(url: file, selected: file == current) {
-                            show(file)
-                        } remove: {
-                            remove(file)
+            if files.isEmpty {
+                // Nothing attached yet: just the button, so a narrow panel has room for it on one line.
+                Spacer(minLength: 0)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(files, id: \.self) { file in
+                            FileTab(url: file, selected: file == current) {
+                                show(file)
+                            } remove: {
+                                remove(file)
+                            }
                         }
                     }
                 }
             }
-            if files.isEmpty {
-                Label("Slides & Notes", systemImage: "doc.on.doc")
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
             Button(action: choose) {
                 Label("Add File", systemImage: "plus")
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .tip("Attach a PDF, PowerPoint or Word file to this deck")
             Button(action: onClose) {
@@ -104,11 +105,9 @@ struct ReferencePanel: View {
                 .symbolRenderingMode(.hierarchical)
             Text("Keep your slides beside your cards")
                 .font(.headline)
-            Text("Drop a PDF, PowerPoint or Word file here, or choose one.\nIt stays attached to this deck, and you can add several.")
+            Text("Drop a PDF, PowerPoint or Word file here, or click Add File.\nIt stays attached to this deck, and you can add several.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            Button("Choose File…", action: choose)
-                .controlSize(.large)
         }
         .padding(24)
     }

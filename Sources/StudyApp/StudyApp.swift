@@ -27,8 +27,10 @@ struct StudyAppMain: App {
         WindowGroup("Animus") {
             RootView()
                 .frame(minWidth: 860, minHeight: 560)
+                .overlay(alignment: .bottomLeading) { PerfMeterOverlay() }
                 .profileScope(session, profiles: profiles, switchProfile: switchProfile)
                 .environment(\.deleteCurrentProfile, deleteCurrentProfile)
+                .onAppear { HitchLog.startIfDevBuild() }
         }
         .defaultSize(width: 1100, height: 720)
         // Always open the main window at launch, even if Animus was last quit
@@ -220,6 +222,7 @@ struct RootView: View {
     @Environment(Library.self) private var library
     @Environment(SyncManager.self) private var sync
     @AppStorage(Pref.setupDone) private var setupDone = false
+    @AppStorage(Pref.connector) private var connectorOn = false
 
     var body: some View {
         Group {
@@ -238,6 +241,10 @@ struct RootView: View {
         .task(id: library.isReady) {
             sync.attach(library)
             if library.isReady { await sync.syncIfAutomatic() }
+        }
+        // Test only: Claude's way into Animus (see Connector.swift).
+        .task(id: "\(library.isReady) \(connectorOn)") {
+            Connector.shared.update(library: library, switchedOn: connectorOn)
         }
         .alert("Animus",
                isPresented: Binding(get: { library.notice != nil }, set: { if !$0 { library.notice = nil } })) {

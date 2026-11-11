@@ -25,6 +25,29 @@ enum Pref {
     static let studyShowTabs = "study.showTabs"
     /// While studying: the card glows in the colour of the answer you give.
     static let studyGlow = "study.glow"
+    /// TEST ONLY: lets Claude reach your cards through Animus (see Connector.swift).
+    static let connector = "connector.enabled"
+    /// A small meter in the corner of the window: frames a second and what Animus is using.
+    static let perfMeter = "perf.meter"
+    /// While studying: how frosted the glass pane behind the card is.
+    static let studyPane = "study.paneStyle"
+}
+
+/// The pane behind the card while you study: frosted glass over a background
+/// picture (three strengths), or no pane at all.
+enum CardPaneStyle: String, CaseIterable, Identifiable {
+    case frosted, lighter, lightest, none
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .frosted: "Frosted"
+        case .lighter: "Lighter"
+        case .lightest: "Lightest"
+        case .none: "None"
+        }
+    }
+    /// The picture shows through enough that the card's words need a soft shadow.
+    var needsTextShadow: Bool { self == .lightest || self == .none }
 }
 
 /// Whether cards use the app's clean look or the deck's own fonts and colours.

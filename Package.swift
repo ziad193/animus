@@ -30,6 +30,11 @@ let package = Package(
             dependencies: ["StudyCore"],
             path: "Sources/StudyCLI"
         ),
+        // TEST ONLY: the helper Claude starts to reach Animus Dev (remove for the final release).
+        .executableTarget(
+            name: "animus-connector",
+            path: "Sources/AnimusConnector"
+        ),
         // The Mac app itself (SwiftUI).
         .executableTarget(
             name: "StudyApp",

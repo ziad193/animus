@@ -15,6 +15,9 @@ struct CardPayload: Equatable {
     var zoom: Double
     var appStyle: Bool
     var accentHex: String
+    /// The words sit straight on a background picture (no pane behind them),
+    /// so they get a soft shadow to stay readable.
+    var onPicture = false
 
     enum Side: String { case question = "q", answer = "a" }
 }
@@ -114,6 +117,10 @@ final class CardWebHost: NSObject, WKNavigationDelegate {
         super.init()
         view.navigationDelegate = self
         view.setValue(false, forKey: "drawsBackground")
+        // Dev builds: keep drawing while the window is behind others, so a
+        // screenshot of it shows the card. (The real app never does this.)
+        let keepDrawing = Selector(("_setWindowOcclusionDetectionEnabled:"))
+        if Library.isTestCollection, view.responds(to: keepDrawing) { view.perform(keepDrawing, with: nil) }
         view.loadHTMLString(CardWebView.shell, baseURL: URL(string: "study-media://media/"))
     }
 
@@ -134,6 +141,7 @@ final class CardWebHost: NSObject, WKNavigationDelegate {
             "zoom": payload.zoom,
             "appStyle": payload.appStyle,
             "accent": payload.accentHex,
+            "onPicture": payload.onPicture,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: object),
               var json = String(data: data, encoding: .utf8) else { return }
@@ -185,5 +193,12 @@ private final class PassiveWebView: WKWebView {
 
 extension CardWebView {
     /// The card page, shared with the iPhone and iPad app (CardPage.swift).
-    static var shell: String { CardPage.shell }
+    static var shell: String {
+        guard Library.isTestCollection else { return CardPage.shell }
+        // Dev builds: no fades. A window behind others doesn't run animations,
+        // so a card that fades in would stay invisible in a screenshot.
+        return CardPage.shell.replacingOccurrences(
+            of: "</head>",
+            with: "<style>#qa { transition: none !important; } .study-reveal { animation: none !important; }</style></head>")
+    }
 }
