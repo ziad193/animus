@@ -1,0 +1,5 @@
+# Settings for the GitHub Pages site. You shouldn't need to change these.
+title: My Training
+lang: en-GB
+exclude:
+  - README.md

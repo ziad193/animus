@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="{{ site.lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{{ page.title | default: site.title }}</title>
+  <style>
+    :root {
+      --bg: #fafaf9; --fg: #1c1917; --muted: #78716c;
+      --line: #e7e5e4; --card: #ffffff; --accent: #2563eb;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0c0a09; --fg: #f5f5f4; --muted: #a8a29e;
+        --line: #292524; --card: #1c1917; --accent: #60a5fa;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-text-size-adjust: 100%;
+    }
+    main { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 1.8rem; line-height: 1.2; margin: 0 0 4px; }
+    h2 {
+      font-size: 1.25rem; margin: 40px 0 12px; padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    h3 { font-size: 1.05rem; margin: 24px 0 8px; }
+    a { color: var(--accent); }
+    ul, ol { padding-left: 1.3em; }
+    li { margin: 2px 0; }
+    blockquote {
+      margin: 16px 0; padding: 8px 14px; border-left: 3px solid var(--accent);
+      background: var(--card); color: var(--muted); border-radius: 0 8px 8px 0;
+    }
+    blockquote p { margin: 4px 0; }
+    code { font-size: .9em; background: var(--card); padding: 1px 5px; border-radius: 4px; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 32px 0; }
+    /* Tables scroll sideways on a phone instead of squashing */
+    .table-wrap { overflow-x: auto; margin: 12px 0; }
+    table { border-collapse: collapse; width: 100%; font-size: .95rem; background: var(--card); }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th { color: var(--muted); font-weight: 600; font-size: .85rem; }
+    td:first-child, td:last-child { white-space: normal; min-width: 9em; }
+    .updated { color: var(--muted); font-size: .85rem; margin-top: 48px; }
+  </style>
+</head>
+<body>
+  <main>
+    {{ content | replace: '<table>', '<div class="table-wrap"><table>' | replace: '</table>', '</table></div>' }}
+    <p class="updated">Last updated {{ site.time | date: "%-d %b %Y" }}</p>
+  </main>
+</body>
+</html>
