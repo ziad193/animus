@@ -45,7 +45,9 @@ struct StudyView: View {
             }
         }
         .task {
-            AppDefaults.current.set(Int(deck.id), forKey: Pref.lastStudiedDeck)
+            if deck.name != AllDue.deckName {   // the temporary all-due deck isn't one to remember
+                AppDefaults.current.set(Int(deck.id), forKey: Pref.lastStudiedDeck)
+            }
             session.onExit = onExit
             if let engine = library.engine {
                 await session.start(engine: engine, deckID: deck.id, media: Library.mediaFolder)

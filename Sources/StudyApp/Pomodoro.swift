@@ -104,7 +104,10 @@ final class Pomodoro {
 
     func pause() {
         guard isRunning else { return }
-        tick()
+        // Note the time left, without moving on to the next phase from here:
+        // when the timer runs out, moving on is what calls pause, and doing
+        // it again from inside went round in circles until the app crashed.
+        if let endDate { remaining = max(0, endDate.timeIntervalSinceNow) }
         isRunning = false
         endDate = nil
         #if os(iOS)
@@ -133,7 +136,7 @@ final class Pomodoro {
     }
 
     private func tick() {
-        guard let endDate else { return }
+        guard isRunning, let endDate else { return }
         remaining = max(0, endDate.timeIntervalSinceNow)
         if remaining <= 0 { advance(playSound: true) }
     }

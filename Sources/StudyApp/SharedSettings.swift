@@ -33,6 +33,11 @@ enum Pref {
     static let studyPane = "study.paneStyle"
 }
 
+/// "Study All Due" on Home borrows every due card into a temporary deck with this name.
+enum AllDue {
+    static let deckName = "All Due Today"
+}
+
 /// The pane behind the card while you study: frosted glass over a background
 /// picture (three strengths), or no pane at all.
 enum CardPaneStyle: String, CaseIterable, Identifiable {

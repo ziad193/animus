@@ -378,12 +378,51 @@ private struct TodayPage: View {
         decks.reduce((0, 0, 0)) { ($0.0 + $1.newCount, $0.1 + $1.learnCount, $0.2 + $1.reviewCount) }
     }
 
+    /// Cards due today across every deck (reviews, and cards you're still learning).
+    private var dueToday: Int { Int(totals.learn + totals.review) }
+
     @AppStorage(Pref.lastStudiedDeck) private var lastStudiedDeck = 0
 
-    /// The deck you studied last, for "Continue" — only while it still has cards waiting.
-    private var continueDeck: Deck? {
-        guard let deck = Deck.find(Int64(lastStudiedDeck), in: decks), deck.dueToday > 0 else { return nil }
-        return deck
+    /// The deck you studied last, for "Continue" once nothing is due.
+    private var lastDeck: Deck? { Deck.find(Int64(lastStudiedDeck), in: decks) }
+
+    /// The temporary deck behind "Study All Due", if it's still around.
+    private var allDueDeck: Deck? {
+        func find(_ decks: [Deck]) -> Deck? {
+            for deck in decks {
+                if deck.filtered, deck.name == AllDue.deckName { return deck }
+                if let inside = find(deck.children) { return inside }
+            }
+            return nil
+        }
+        return find(decks)
+    }
+
+    /// Gathers every card due today, from all decks, into one shuffled pile and opens it.
+    /// (A filtered deck, as in Anki: the cards are borrowed, and go home afterwards.)
+    private func studyAllDue() async {
+        guard let engine = library.engine else { return }
+        do {
+            let id: Int64
+            if let existing = allDueDeck {
+                try await engine.rebuildFilteredDeck(existing.id)
+                id = existing.id
+            } else {
+                id = try await engine.createFilteredDeck(name: AllDue.deckName, search: "is:due", limit: 9999,
+                                                         order: "random", reschedule: true)
+            }
+            await library.refresh()
+            deckActions.openDeck = id
+        } catch {
+            library.notice = error.localizedDescription
+        }
+    }
+
+    /// Back on Home: the borrowed cards go back to their own decks and the temporary deck goes.
+    private func tidyAllDue() async {
+        guard let engine = library.engine, let deck = allDueDeck else { return }
+        _ = try? await engine.deleteDeck(deck.id)
+        await library.refresh()
     }
 
     @AppStorage(AppBackground.key) private var background = AppBackground.none
@@ -502,6 +541,7 @@ private struct TodayPage: View {
         .task(id: decks.map(\.dueToday)) {
             stats = try? await library.engine?.stats(days: Heatmap.historyDays)
         }
+        .task { await tidyAllDue() }
     }
 
     // MARK: Arranging Home
@@ -576,10 +616,17 @@ private struct TodayPage: View {
         // One row when they fit, otherwise wrapped into equal columns.
         // (`FlowRow` builds its buttons twice to find out which; this doesn't.)
         ColumnsLayout(minimum: FlowRow<EmptyView>.itemWidth, spacing: 10, oneRowIfFits: true) {
-            if let continueDeck {
+            if dueToday > 0 {
+                ActionButton(title: "Study All Due", symbol: "shuffle", prominent: true,
+                             help: "Study every card due today, from all your decks, in a random order") {
+                    Task { await studyAllDue() }
+                }
+            } else if let lastDeck {
+                // Nothing left that's due: offer the way back to the deck you were last in.
                 ActionButton(title: "Continue", symbol: "play.fill", prominent: true,
-                             help: "Carry on studying \(continueDeck.displayPath)") {
-                    study(continueDeck)
+                             help: "Go back to \(lastDeck.displayPath)") {
+                    // Straight to its cards if it still has some for today (new ones); otherwise to the deck.
+                    if lastDeck.dueToday > 0 { study(lastDeck) } else { open(lastDeck) }
                 }
             }
             ActionButton(title: "Add Cards", symbol: "plus.rectangle.on.rectangle", help: "Make new cards (⌘N)") {
